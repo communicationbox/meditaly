@@ -91,6 +91,7 @@ var help: PanelContainer
 var victory: Label
 var intro: PanelContainer
 var labels: Array[Label3D] = []
+var _banner_castle := -1
 var rings: Array[MeshInstance3D] = []
 var ring_mats: Array[StandardMaterial3D] = []
 var beam: MeshInstance3D
@@ -727,6 +728,8 @@ func toggle_pause() -> void:
 		create_tween().tween_property(pause_panel, "modulate:a", 1.0, 0.12)
 	if game.sim and not game.net_multiplayer:
 		game.sim.paused = pause_panel.visible
+	if game.tutorial != null:
+		game.tutorial.visible = not pause_panel.visible  # è su un livello sopra: il velo non lo coprirebbe
 	if not pause_panel.visible and is_instance_valid(_settings_panel):
 		_settings_panel.queue_free()
 
@@ -1049,6 +1052,11 @@ func banner(title: String, sub: String, p: Vector3) -> void:
 	inner.add_child(st)
 	root.add_child(box)
 	_banner_box = box
+	# il titolo finisce proprio davanti al nome del castello: finché c'è, il nome si fa da parte
+	_banner_castle = -1
+	for i in game.castles.size():
+		if (game.castles[i].center as Vector3).distance_to(p) < 1.0:
+			_banner_castle = i
 	box.pivot_offset = Vector2(400, 45)
 	box.scale = Vector2(0.3, 0.3)
 	box.modulate.a = 0.0
@@ -1217,6 +1225,7 @@ func _update_labels(cs: Array) -> void:
 		var cap: float = cs[i][1]
 		var is_mine: bool = o == game.my_house
 		var l := labels[i]
+		l.transparency = 1.0 if i == _banner_castle and is_instance_valid(_banner_box) else 0.0
 		var extra := ""
 		if cap > 0.0:
 			extra = "\n%s ferito %d%%" % ["podestà" if o == Defs.NEUTRAL else "re", int(cap * 100.0)]

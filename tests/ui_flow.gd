@@ -10,6 +10,14 @@ func _init() -> void:
 	_run.call_deferred()
 
 
+## Aspetta che lo stato con le botteghe sbloccate arrivi davvero all'interfaccia.
+func wait_shops(g: Game) -> void:
+	for k in 600:
+		if g.has_shop(Defs.POWER_BUILDING[Defs.P_PARMIGIANO]) and g.has_shop(Defs.POWER_BUILDING[Defs.P_SCUDO]):
+			return
+		await process_frame
+
+
 func check(name_: String, ok: bool) -> void:
 	print("%s %s" % ["OK  " if ok else "FAIL", name_])
 	if not ok:
@@ -172,7 +180,7 @@ func _run() -> void:
 	# potere: tasto + clic sinistro
 	sim.houses[4].faith = 150.0
 	sim.houses[4].all_shops = true
-	await wait_s(0.3)  # lo sblocco arriva all'interfaccia con lo stato successivo
+	await wait_shops(hud.game)  # lo sblocco arriva all'interfaccia con lo stato successivo
 	await key(KEY_1)
 	check("tasto 1 arma il potere", c.pending.get("kind", "") == "power" and c.pending.get("id", -1) == Defs.P_PARMIGIANO)
 	await wait_frames(3)
@@ -184,7 +192,7 @@ func _run() -> void:
 	# pulsante potere dall'interfaccia, annullo col destro
 	sim.houses[4].faith = 150.0
 	sim.houses[4].all_shops = true
-	await wait_s(0.5)
+	await wait_shops(hud.game)
 	await click(hud.power_btns[Defs.P_SCUDO].get_global_rect().get_center())
 	check("pulsante potere arma la mira", c.pending.get("id", -1) == Defs.P_SCUDO)
 	await click(Vector2(800, 300), MOUSE_BUTTON_RIGHT)
