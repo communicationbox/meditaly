@@ -55,7 +55,7 @@ func setup(g: Node) -> void:
 		{"title": "Un potere speciale", "text": "Ora il divertimento. Accanto al tuo castello è appena nato un caseificio: ogni potere ha bisogno della sua bottega (le costruisci fuori dalle mura dal pannello del castello).\n\nClicca il riquadro che lampeggia (o premi il tasto 1), poi fai CLIC SINISTRO sul castello. Arriva una forma di Parmigiano gigante!", "enter": _enter_power, "done": _done_power, "mark": _mark_power},
 		{"title": "Conquista il castello", "text": "", "text_fn": _capture_text, "done": _done_capture, "tick": _tick_capture},
 		{"title": "Difendi i tuoi castelli", "text": "Quando ti attaccano, seleziona il castello e usa i pulsanti che lampeggiano:\n\nSulle mura: i balestrieri salgono sulle mura\nRipara: ricostruisce ciò che è crollato\nMangano: tira una pietra dove clicchi\nOlio: brucia chi è vicino alle mura", "enter": _enter_defense, "mark": _mark_defense, "manual": true},
-		{"title": "Ora tocca a te!", "text": "Da adesso le altre casate si muovono. Per 4 minuti e mezzo c'è la tregua: nessuna ti attacca, approfittane per creare soldati.\n\nRicorda: crea soldati, premi T, clic destro sul nemico.\nPremi F1 quando vuoi rivedere i comandi.\n\nBuona conquista!", "manual": true, "last": true},
+		{"title": "Ora tocca a te!", "text": "Da adesso le altre casate si muovono. Per 2 minuti c'è la tregua: nessuna ti attacca, approfittane per creare soldati.\n\nRicorda: crea soldati, premi T, clic destro sul nemico.\nPremi F1 quando vuoi rivedere i comandi.\n\nBuona conquista!", "manual": true, "last": true},
 	]
 	_go(0)
 

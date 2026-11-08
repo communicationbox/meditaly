@@ -99,6 +99,7 @@ var paused := false
 ## Difficoltà: rendita dell'IA rispetto a un umano e moltiplicatore del suo esercito massimo.
 var ai_income := 0.8
 var ai_cap_mult := 1.0
+var ai_stage := {}  # casata -> raduno in corso {c, pos, ids, t}; non si salva: al caricamento riparte
 var bards: Array[U] = []
 ## Edifici costruiti (fuori dalle mura), di chi li ha costruiti.
 var buildings: Array = []
@@ -111,10 +112,12 @@ const TOWER_EXTRA := 5.0 * (CS - 1)
 ## Sotto attacco la riparazione va a un quarto: aiuta a resistere ma non annulla le catapulte.
 const REPAIR_PER_TICK := 26
 const REPAIR_PER_TICK_ATTACKED := 7
-## Per i primi minuti l'IA prende solo castelli senza padrone: tutti hanno tempo di prepararsi.
-const TRUCE_TIME := 270.0
+## Primi due minuti di tregua: nessuna IA attacca, tutti hanno tempo di prepararsi.
+const TRUCE_TIME := 120.0
 const AI_GUARD := 4
-const AI_MIN_ARMY := 16
+const AI_MIN_ARMY := 22
+const AI_DEFEND_MIN := 4
+const AI_HOUSE_GRACE := 120.0
 ## Chi ha almeno tanti castelli diventa il bersaglio preferito: le altre casate reagiscono.
 const AI_LEADER_CASTLES := 4
 const AI_LEADER_FACTOR := 0.75
@@ -137,13 +140,19 @@ const OIL_AUTO_MIN := 4
 const MILITIA_SAFE_DIST := 35.0 + 12.0 * (CS - 1)
 ## Il re: si conquista il castello solo uccidendolo. Senza colpi si riprende in fretta.
 const KING_HP := 800.0
-const KING_REGEN := 30.0
+const KING_REGEN := 12.0
 const KING_CALM := 3.0
 ## Il nuovo re appena seduto ha bisogno di un momento (e non lo si può colpire).
 const KING_SAFE := 12.0
 ## Ogni truppa già in marcia verso un castello lo rende meno appetibile: niente accanimenti in più casate.
 const AI_PILE_PENALTY := 0.06
 const AI_RAMP_SECONDS := 600.0
+## L'armata dell'IA si raduna fuori tiro dalle torri e assalta compatta: se ognuno arrivasse
+## con il suo passo (cavalieri davanti, arieti ore dopo) le torri li mangerebbero a piccoli gruppi.
+const AI_STAGE_TIMEOUT := 90.0
+const AI_STAGE_RADIUS := 22.0
+const AI_STAGE_READY := 0.8
+const AI_STAGE_MIN := 6
 const SRC_TOWER := 6
 const SRC_POWER := 7
 const SRC_CASTLE := 8
@@ -1834,17 +1843,21 @@ func _tick_castle(c: Dictionary, dt: float) -> void:
 				nu.has_order = true
 	# nemici attorno al castello (allarme, torri, mangano, milizia)
 	var hostile_near := 0
+	var threat := 0
 	var nearest: U = null
 	var nd := 1e9
 	for u in ulist:
 		var dist := u.pos.distance_to(ce)
 		if dist > 58.0 + R * 1.5:
 			continue
-		if u.team != owner_t and u.feast <= 0.0:  # chi è alla sagra non assedia
+		if u.team != owner_t and u.feast <= 0.0 and not at_peace(owner_t, u.team):  # chi è alla sagra non assedia
 			hostile_near += 1
+			if dist < 20.0 + R and u.type != Defs.FRATE:
+				threat += 1
 			if dist < nd:
 				nd = dist
 				nearest = u
+	c.threat = threat
 	c.under_attack = (hostile_near > 0 and nd < 20.0 + R) or float(c.king_calm) > 0.0
 	# da quanto nessuno lo disturba: i castelli tranquilli (isolati, su un'isola) attirano le IA
 	c.quiet_t = 0.0 if c.under_attack or hostile_near > 0 else float(c.get("quiet_t", 0.0)) + dt
@@ -2149,9 +2162,14 @@ func _ai_tick(t: int, _dt: float) -> void:
 				near_ids.append(u.id)
 		if not near_ids.is_empty() and rng.randf() < 0.25:
 			cmd_order(t, near_ids, attacked.rally, false)
-		_ai_power(t, attacked.center, true)
-		return
+		# un soldato sperduto sotto le mura non deve tenere in casa l'armata per mezz'ora
+		if int(attacked.get("threat", 0)) >= AI_DEFEND_MIN or float(attacked.king_calm) > 0.0:
+			_ai_power(t, attacked.center, true)
+			return
 	# attacco
+	if ai_stage.has(t):
+		_ai_stage_tick(t, ai_stage[t])
+		return
 	h.army_t = float(h.army_t) - 2.0
 	if h.army_t > 0.0:
 		return
@@ -2172,8 +2190,32 @@ func _ai_tick(t: int, _dt: float) -> void:
 	var best := _ai_target(t, center)
 	if best.is_empty():
 		return
-	cmd_order(t, ids, best.rally, false)
-	_ai_power(t, best.center, false)
+	var to_army := center - (best.center as Vector3)
+	to_army.y = 0.0
+	var sp: Vector3 = (best.center as Vector3) + to_army.normalized() * (float(TOWER_RANGE) + R + 14.0)
+	cmd_order(t, ids, sp, false)
+	ai_stage[t] = {"c": best.id, "pos": sp, "ids": ids, "t": time + AI_STAGE_TIMEOUT}
+
+
+## Quando quasi tutta l'armata è al raduno (o il tempo è scaduto) parte l'assalto.
+func _ai_stage_tick(t: int, st: Dictionary) -> void:
+	var c: Dictionary = castles[st.c]
+	var alive := PackedInt32Array()
+	var arrived := 0
+	for id: int in st.ids:
+		var u: U = by_id.get(id)
+		if u == null or u.team != t or u.hp <= 0.0:
+			continue
+		alive.append(id)
+		if Vector2(u.pos.x - (st.pos as Vector3).x, u.pos.z - (st.pos as Vector3).z).length() < AI_STAGE_RADIUS:
+			arrived += 1
+	if int(c.owner) == t or alive.size() < AI_STAGE_MIN or at_peace(t, int(c.owner)):
+		ai_stage.erase(t)
+		return
+	if float(arrived) >= float(alive.size()) * AI_STAGE_READY or time > float(st.t):
+		ai_stage.erase(t)
+		cmd_order(t, alive, c.rally, false)
+		_ai_power(t, c.center, false)
 
 
 ## Le truppe libere da mandare all'attacco: ogni castello tiene a casa una piccola guarnigione.
@@ -2211,6 +2253,8 @@ func _ai_target(t: int, from: Vector3) -> Dictionary:
 	for c: Dictionary in castles:
 		if c.owner == t:
 			continue
+		if time < truce_until + AI_HOUSE_GRACE and c.owner != Defs.NEUTRAL:
+			continue  # subito dopo la tregua solo i castelli liberi: chi gioca ha tempo di organizzarsi
 		var d: float = (c.center as Vector3).distance_to(from)
 		if c.owner == Defs.NEUTRAL:
 			d *= 0.25  # finita la tregua si va prima sui castelli liberi: nessuno li difende

@@ -330,6 +330,8 @@ func _run() -> void:
 		if cs.owner == Defs.NEUTRAL:
 			cs.owner = 0
 	sim.time = Sim.TRUCE_TIME + 1.0
+	check("subito dopo la tregua l'IA lascia stare le casate", sim._ai_target(2, g.castles[2].center).is_empty())
+	sim.time = Sim.TRUCE_TIME + Sim.AI_HOUSE_GRACE + 1.0
 	check("dopo la tregua l'IA può attaccare", not sim._ai_target(2, g.castles[2].center).is_empty())
 	# un castello che nessuno disturba da tanto (Palermo, sull'isola) attira le IA anche da lontano
 	for cs: Dictionary in g.castles:

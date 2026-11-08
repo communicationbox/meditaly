@@ -170,7 +170,7 @@ const FRIAR_SLEEP := [
 
 const HOUSE_UNIT_CAP := 120
 ## L'esercito dell'IA cresce con i castelli: chi è in testa può davvero chiudere la partita.
-const AI_UNIT_CAP := 24
+const AI_UNIT_CAP := 34
 const AI_UNIT_CAP_PER_CASTLE := 6
 ## Fiorini per ogni castello conquistato.
 const CAPTURE_REWARD := 150.0
