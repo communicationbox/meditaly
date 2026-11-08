@@ -99,6 +99,7 @@ var paused := false
 ## Difficoltà: rendita dell'IA rispetto a un umano e moltiplicatore del suo esercito massimo.
 var ai_income := 0.8
 var ai_cap_mult := 1.0
+var ai_saving := {}  # casata -> macchina d'assedio per cui sta risparmiando (non si salva)
 var ai_stage := {}  # casata -> raduno in corso {c, pos, ids, t}; non si salva: al caricamento riparte
 var bards: Array[U] = []
 ## Edifici costruiti (fuori dalle mura), di chi li ha costruiti.
@@ -119,7 +120,7 @@ const AI_MIN_ARMY := 22
 const AI_DEFEND_MIN := 4
 const AI_HOUSE_GRACE := 120.0
 ## Chi ha almeno tanti castelli diventa il bersaglio preferito: le altre casate reagiscono.
-const AI_LEADER_CASTLES := 4
+const AI_LEADER_CASTLES := 3
 const AI_LEADER_FACTOR := 0.75
 ## Castello che nessuno attacca da QUIET_START secondi: sembra sempre più vicino alle IA,
 ## fino a QUIET_MIN volte la sua distanza dopo QUIET_FULL secondi. Così nessuno resta al sicuro.
@@ -153,9 +154,10 @@ const AI_STAGE_TIMEOUT := 90.0
 const AI_STAGE_RADIUS := 22.0
 const AI_STAGE_READY := 0.8
 const AI_STAGE_MIN := 6
-const SRC_TOWER := 6
-const SRC_POWER := 7
-const SRC_CASTLE := 8
+## Fonti di danno nelle statistiche: dopo i tipi di unità (Frate, Nonna e Menestrello sono 6, 7, 8).
+const SRC_TOWER := 9
+const SRC_POWER := 10
+const SRC_CASTLE := 11
 var repair_slow_when_attacked := true
 var seed_override := -1
 var truce_until := TRUCE_TIME
@@ -2139,12 +2141,21 @@ func _ai_tick(t: int, _dt: float) -> void:
 		if r > 0.95: type = Defs.MENESTRELLO
 		elif r > 0.90: type = Defs.NONNA
 		elif r > 0.86: type = Defs.CATAPULTA
-		elif r > 0.80: type = Defs.ARIETE
-		elif r > 0.70: type = Defs.BOMBARDA
+		elif r > 0.76: type = Defs.ARIETE
+		elif r > 0.72: type = Defs.BOMBARDA
 		elif r > 0.52: type = Defs.CAVALIERE
 		elif r > 0.30: type = Defs.BALESTRIERE
+		# all'inizio servono soldati: i primi castelli da prendere sono quelli liberi
+		if time < truce_until + AI_HOUSE_GRACE and (type == Defs.ARIETE or type == Defs.CATAPULTA or type == Defs.BOMBARDA):
+			type = Defs.FANTE
+		# le macchine d'assedio costano: chi ne vuole una mette da parte i fiorini, se no le mura restano in piedi
+		if ai_saving.has(t):
+			type = int(ai_saving[t])
 		if h.gold >= Defs.UNITS[type].cost:
 			cmd_recruit(t, c0.id, type)
+			ai_saving.erase(t)
+		elif type == Defs.ARIETE or type == Defs.CATAPULTA or type == Defs.BOMBARDA:
+			ai_saving[t] = type
 	# difesa
 	var attacked: Dictionary = {}
 	for c: Dictionary in own:

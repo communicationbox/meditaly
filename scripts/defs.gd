@@ -117,8 +117,8 @@ enum { FANTE, BALESTRIERE, CAVALIERE, ARIETE, CATAPULTA, BOMBARDA, FRATE, NONNA,
 
 const UNITS := [
 	{"name": "Fante", "hp": 45, "dmg": 8, "range": 1.8, "speed": 9.0, "cd": 0.8, "cost": 20, "time": 2.5, "aggro": 16.0, "desc": "Economico, si butta nella mischia"},
-	{"name": "Balestriere", "hp": 28, "dmg": 7, "range": 20.0, "speed": 8.5, "cd": 1.5, "cost": 30, "time": 3.5, "aggro": 24.0, "desc": "Tira da lontano, ottimo sulle mura"},
-	{"name": "Cavaliere", "hp": 95, "dmg": 16, "range": 2.2, "speed": 16.0, "cd": 1.0, "cost": 50, "time": 5.0, "aggro": 20.0, "desc": "Veloce e letale in campo aperto"},
+	{"name": "Balestriere", "hp": 28, "dmg": 6, "range": 20.0, "speed": 8.5, "cd": 1.5, "cost": 35, "time": 3.5, "aggro": 24.0, "desc": "Tira da lontano, ottimo sulle mura"},
+	{"name": "Cavaliere", "hp": 95, "dmg": 16, "range": 2.2, "speed": 16.0, "cd": 1.0, "cost": 45, "time": 5.0, "aggro": 20.0, "desc": "Veloce e letale in campo aperto"},
 	{"name": "Ariete", "hp": 220, "dmg": 4, "range": 2.5, "speed": 6.5, "cd": 1.6, "cost": 90, "time": 6.0, "aggro": 0.0, "desc": "Sfonda porte e mura da vicino"},
 	{"name": "Catapulta", "hp": 110, "dmg": 30, "range": 45.0, "speed": 6.0, "cd": 5.0, "cost": 120, "time": 8.0, "aggro": 45.0, "desc": "Scaglia massi: le mura crollano"},
 	{"name": "Bombarda", "hp": 85, "dmg": 45, "range": 42.0, "speed": 5.5, "cd": 7.0, "cost": 170, "time": 10.0, "aggro": 42.0, "desc": "Palla di tiro teso, perfora tutto"},

@@ -95,8 +95,8 @@ func _run() -> void:
 	sim.seed_override = sd
 	sim.ai_aggression = aggr
 	sim.stats = {"recruited": [0, 0, 0, 0, 0, 0, 0, 0, 0], "spent": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-		"powers": [0, 0, 0, 0, 0], "damage": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-		"kills": [0, 0, 0, 0, 0, 0, 0, 0, 0], "deaths": [0, 0, 0, 0, 0, 0, 0, 0, 0],
+		"powers": [0, 0, 0, 0, 0], "damage": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+		"kills": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "deaths": [0, 0, 0, 0, 0, 0, 0, 0, 0],
 		"captures": 0, "first_capture": -1.0, "repaired": 0}
 	sim.setup(g, base.duplicate(true))
 	var step := 1.0 / Defs.SIM_HZ
