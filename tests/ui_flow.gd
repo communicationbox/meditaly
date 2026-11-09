@@ -52,6 +52,11 @@ func click(p: Vector2, button := MOUSE_BUTTON_LEFT) -> void:
 		e.global_position = p
 		e.pressed = pressed
 		e.button_mask = (MOUSE_BUTTON_MASK_LEFT if button == MOUSE_BUTTON_LEFT else MOUSE_BUTTON_MASK_RIGHT) if pressed else 0
+		if not pressed:  # se nel frattempo il mouse vero si è spostato, il pulsante non scatterebbe
+			var back := InputEventMouseMotion.new()
+			back.position = p
+			back.global_position = p
+			Input.parse_input_event(back)
 		Input.parse_input_event(e)
 		await wait_frames(2)
 
@@ -75,6 +80,10 @@ func drag_power(a: Vector2, b: Vector2) -> void:
 			await wait_frames(3)
 	await wait_frames(3)
 	await shot("ui_mira_trascina")
+	var last := InputEventMouseMotion.new()
+	last.position = b
+	last.global_position = b
+	Input.parse_input_event(last)
 	var u := InputEventMouseButton.new()
 	u.button_index = MOUSE_BUTTON_LEFT
 	u.position = b

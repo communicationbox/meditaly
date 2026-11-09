@@ -40,6 +40,11 @@ func click(p: Vector2, button := MOUSE_BUTTON_LEFT) -> void:
 		e.position = p
 		e.global_position = p
 		e.pressed = pressed
+		if not pressed:  # se nel frattempo il mouse vero si è spostato, il pulsante non scatterebbe
+			var back := InputEventMouseMotion.new()
+			back.position = p
+			back.global_position = p
+			Input.parse_input_event(back)
 		Input.parse_input_event(e)
 		await frames(2)
 
