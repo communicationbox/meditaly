@@ -325,6 +325,69 @@ func frate() -> ArrayMesh:
 
 
 ## Nonna: vestito nero, scialle della casata, crocchia bianca, occhiali, mattarello.
+## Busto del re a partire da quota y: veste, ermellino, testa, barba, naso e corona.
+func _busto(robe: Color, x: float, y: float) -> void:
+	_b(Vector3(x - 0.34, y, -0.2), Vector3(x + 0.34, y + 0.72, 0.2), robe)
+	_b(Vector3(x - 0.36, y + 0.58, -0.24), Vector3(x + 0.36, y + 0.74, 0.24), WHITE)
+	_b(Vector3(x - 0.2, y + 0.74, -0.18), Vector3(x + 0.2, y + 1.12, 0.18), SKIN)
+	_b(Vector3(x - 0.21, y + 0.68, 0.1), Vector3(x + 0.21, y + 0.9, 0.24), Color(0.92, 0.92, 0.9))
+	_b(Vector3(x - 0.05, y + 0.88, 0.18), Vector3(x + 0.05, y + 0.98, 0.27), Color(0.9, 0.55, 0.5))
+	_b(Vector3(x - 0.22, y + 1.12, -0.2), Vector3(x + 0.22, y + 1.24, 0.2), GOLD)
+	for k: Vector2 in [Vector2(-0.18, -0.16), Vector2(0.14, -0.16), Vector2(-0.18, 0.12), Vector2(0.14, 0.12)]:
+		_b(Vector3(x + k.x, y + 1.24, k.y), Vector3(x + k.x + 0.05, y + 1.38, k.y + 0.05), GOLD)
+
+
+## Le uscite di scena del re, oltre al gabinetto: 1 botte, 2 trono a molla, 3 regina, 4 tinozza.
+func re_scena(robe: Color, v: int) -> ArrayMesh:
+	_begin(1.2)
+	var iron := Color(0.36, 0.34, 0.33)
+	var dark := Color(0.3, 0.19, 0.1)
+	match v:
+		1:
+			for l: Array in [[0.0, 0.3, 0.5], [0.3, 0.65, 0.62], [0.65, 1.05, 0.68], [1.05, 1.35, 0.6], [1.35, 1.6, 0.5]]:
+				_b(Vector3(-float(l[2]), l[0], -float(l[2])), Vector3(l[2], l[1], l[2]), WOODC)
+			for y: float in [0.28, 1.3]:
+				_b(Vector3(-0.64, y, -0.64), Vector3(0.64, y + 0.08, 0.64), iron)
+			_b(Vector3(-0.42, 1.6, -0.42), Vector3(0.42, 1.63, 0.42), dark)
+			_busto(robe, 0.0, 1.05)
+			_b(Vector3(-0.52, 1.56, 0.34), Vector3(-0.32, 1.7, 0.56), SKIN)
+			_b(Vector3(0.32, 1.56, 0.34), Vector3(0.52, 1.7, 0.56), SKIN)
+		2:
+			_b(Vector3(-0.7, 0.0, -0.7), Vector3(0.7, 0.14, 0.7), WOODC)
+			for k in 7:
+				var w := 0.5 if k % 2 == 0 else 0.36
+				_b(Vector3(-w, 0.14 + k * 0.16, -w), Vector3(w, 0.26 + k * 0.16, w), Color(0.82, 0.68, 0.3))
+			_b(Vector3(-0.62, 1.26, -0.56), Vector3(0.62, 1.42, 0.66), Color(0.62, 0.08, 0.1))
+			_b(Vector3(-0.62, 1.42, -0.62), Vector3(0.62, 3.0, -0.44), Color(0.62, 0.08, 0.1))
+			_b(Vector3(-0.7, 3.0, -0.66), Vector3(0.7, 3.14, -0.4), GOLD)
+			_b(Vector3(-0.27, 1.42, 0.0), Vector3(-0.03, 1.64, 0.82), robe * 0.8)
+			_b(Vector3(0.03, 1.42, 0.0), Vector3(0.27, 1.64, 0.82), robe * 0.8)
+			_busto(robe, 0.0, 1.42)
+		3:
+			_b(Vector3(-0.85, 0.0, -0.14), Vector3(-0.62, 0.72, 0.14), robe * 0.7)
+			_b(Vector3(-0.48, 0.0, -0.14), Vector3(-0.25, 0.72, 0.14), robe * 0.7)
+			_busto(robe, -0.55, 0.72)
+			var dress := Color(0.46, 0.1, 0.42)
+			_b(Vector3(0.28, 0.0, -0.48), Vector3(1.28, 0.7, 0.48), dress)
+			_b(Vector3(0.42, 0.7, -0.32), Vector3(1.14, 1.5, 0.32), dress)
+			_b(Vector3(0.44, 1.42, -0.34), Vector3(1.12, 1.56, 0.34), GOLD)
+			_b(Vector3(0.58, 1.56, -0.2), Vector3(0.98, 2.0, 0.2), SKIN)
+			_b(Vector3(0.54, 1.82, -0.26), Vector3(1.02, 2.06, 0.1), Color(0.34, 0.2, 0.1))
+			_b(Vector3(0.54, 2.06, -0.24), Vector3(1.02, 2.16, 0.24), GOLD)
+			_b(Vector3(-0.3, 1.66, -0.08), Vector3(0.5, 1.82, 0.08), dress)
+			_b(Vector3(-0.42, 1.62, -0.12), Vector3(-0.26, 1.86, 0.12), SKIN)
+		4:
+			_b(Vector3(-0.95, 0.0, -0.75), Vector3(0.95, 0.42, 0.75), WOODC)
+			_b(Vector3(-1.0, 0.42, -0.8), Vector3(1.0, 0.58, 0.8), dark)
+			for x: float in [-0.7, 0.62]:
+				_b(Vector3(x, 0.02, -0.78), Vector3(x + 0.08, 0.5, 0.78), iron)
+			_b(Vector3(-0.86, 0.5, -0.66), Vector3(0.86, 0.59, 0.66), Color(0.3, 0.62, 0.9))
+			_busto(robe, 0.0, 0.45)
+			_b(Vector3(-1.5, 0.92, 0.28), Vector3(1.5, 1.02, 0.38), WOODC)
+			_b(Vector3(1.32, 0.72, 0.24), Vector3(1.72, 1.2, 0.42), WOODC)
+	return st.commit()
+
+
 func nonna() -> ArrayMesh:
 	_begin(1.0)
 	var nero := Color(0.12, 0.11, 0.12)

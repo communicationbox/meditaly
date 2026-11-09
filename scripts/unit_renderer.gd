@@ -126,7 +126,7 @@ func setup(g: Node) -> void:
 		wm.transform_format = MultiMesh.TRANSFORM_3D
 		wm.use_custom_data = true
 		wm.mesh = meshes[Defs.FRATE] if k == Defs.B_CHIESA else m.worker(k - 1)
-		wm.instance_count = 8 * Buildings.MAX_PER_HOUSE
+		wm.instance_count = Defs.HOUSE_COUNT * Buildings.MAX_PER_HOUSE
 		wm.visible_instance_count = 0
 		var wmi := MultiMeshInstance3D.new()
 		wmi.multimesh = wm

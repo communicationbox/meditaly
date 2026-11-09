@@ -112,11 +112,11 @@ func _run() -> void:
 			i -= 1
 		if sim.time >= mark:
 			mark += 120.0
-			var per := [0, 0, 0, 0, 0, 0, 0, 0, 0]
+			var per := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 			for u in sim.ulist:
 				per[u.team] += 1
 			var gold := []
-			for h in 8:
+			for h in Defs.HOUSE_COUNT:
 				gold.append(int(sim.houses[h].gold))
 			var hist := {}
 			for u in sim.ulist:

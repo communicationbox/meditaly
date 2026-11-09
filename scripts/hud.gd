@@ -3,8 +3,8 @@ extends CanvasLayer
 ## Interfaccia di gioco. Principio: in ogni momento deve essere chiaro chi sei, dove sei e cosa fare ora.
 
 const POWER_GLYPHS := ["parmigiano", "vino", "terremoto", "scudo", "mucche"]
-const CARD_W := 102.0
-const CARD_H := 46.0
+const CARD_W := 140.0
+const CARD_H := 54.0
 const HINT_LIFE := 7.0
 
 var game: Node
@@ -31,6 +31,10 @@ var cap_bar: ProgressBar
 var cap_lbl: Label
 var queue_row: HBoxContainer
 var queue_bar: ProgressBar
+const QUEUE_SLOTS := 8  # quanti soldati può avere in coda un castello
+const QUEUE_SIZE := 40.0
+var queue_pics: Array[TextureRect] = []
+var recruit_pics: Array[TextureRect] = []
 var enemy_hint: Label
 var recruit_btns: Array[Button] = []
 var recruit_cost: Array[Label] = []
@@ -50,6 +54,7 @@ var build_counts: Array[Label] = []
 var build_costs: Array[Label] = []
 var build_glyphs: Array[Glyph] = []
 var power_locks: Array[Glyph] = []
+var power_names: Array[Label] = []
 ## Fila "le tue botteghe" sopra i poteri: icona e quante ne hai di ciascuna.
 var shop_cells: Array[Control] = []
 var shop_counts: Array[Label] = []
@@ -71,6 +76,12 @@ var power_cost: Array[Label] = []
 var power_cd: Array[Label] = []
 var hint_lbl: Label
 var alert_btn: Button
+## Icone degli eventi in corso: restano dopo il titolo grande e portano sul posto.
+const EVENT_BOX_TOP := 64.0
+const EVENT_MAX := 5
+const EVENT_BLINK := 4.0
+var event_box: VBoxContainer
+var event_icons: Array = []  # {btn, p, t}
 var alert_castle := -1
 ## Castelli miei che erano sotto attacco al giro prima, e quando ho suonato l'ultimo allarme per ognuno.
 var _attacked_prev := {}
@@ -167,29 +178,33 @@ func _top_bar() -> void:
 	shield.size = Vector2(19, 25)
 	shield.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	who.add_child(shield)
-	house_lbl = UiStyle.label("", 18, UiStyle.INK, true)
+	house_lbl = UiStyle.label("", 22, UiStyle.INK, true)
 	house_lbl.position = Vector2(28, 1)
 	who.add_child(house_lbl)
 	home_btn = who
 	h.add_child(who)
-	gold_lbl = UiStyle.label("", 18, UiStyle.GOLD, true)
+	gold_lbl = UiStyle.label("", 22, UiStyle.GOLD, true)
 	gold_lbl.tooltip_text = "Fiorini: servono per i soldati e le riparazioni"
 	gold_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
-	income_lbl = UiStyle.label("", 12, UiStyle.MUTED)
+	income_lbl = UiStyle.label("", 15, UiStyle.MUTED)
 	income_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
-	h.add_child(_pair(gold_lbl, income_lbl))
-	faith_lbl = UiStyle.label("", 18, UiStyle.INK, true)
+	h.add_child(_pair(gold_lbl, income_lbl, "moneta"))
+	faith_lbl = UiStyle.label("", 22, UiStyle.INK, true)
 	faith_lbl.tooltip_text = "Fede: serve per i poteri (tasti 1-5)"
 	faith_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
-	faith_rate_lbl = UiStyle.label("fede", 12, UiStyle.MUTED)
+	faith_rate_lbl = UiStyle.label("", 15, UiStyle.MUTED)
 	faith_rate_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
-	h.add_child(_pair(faith_lbl, faith_rate_lbl))
-	castles_lbl = UiStyle.label("", 18, UiStyle.INK, true)
-	h.add_child(_pair(castles_lbl, UiStyle.label("castelli", 12, UiStyle.MUTED)))
-	troops_lbl = UiStyle.label("", 18, UiStyle.INK, true)
+	h.add_child(_pair(faith_lbl, faith_rate_lbl, "fede"))
+	castles_lbl = UiStyle.label("", 22, UiStyle.INK, true)
+	castles_lbl.tooltip_text = "Castelli tuoi su quelli della penisola"
+	castles_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
+	h.add_child(_pair(castles_lbl, null, "castello"))
+	troops_lbl = UiStyle.label("", 22, UiStyle.INK, true)
 	troops_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
-	h.add_child(_pair(troops_lbl, UiStyle.label("truppe", 12, UiStyle.MUTED)))
-	truce_lbl = UiStyle.label("", 15, UiStyle.GOLD, true)
+	if troops_lbl.tooltip_text == "":
+		troops_lbl.tooltip_text = "Truppe: quante ne hai e il massimo che puoi avere"
+	h.add_child(_pair(troops_lbl, null, "elmo"))
+	truce_lbl = UiStyle.label("", 18, UiStyle.GOLD, true)
 	truce_lbl.tooltip_text = "Tregua: le casate non si combattono fra loro, né soldati né torri né poteri. Le IA stanno ferme, tu puoi già prendere i castelli liberi"
 	truce_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
 	h.add_child(truce_lbl)
@@ -198,12 +213,23 @@ func _top_bar() -> void:
 
 
 ## Valore grande con la sua etichetta piccola accanto, sulla stessa riga.
-func _pair(value: Label, unit: Label) -> Control:
+## Il guadagno mostrato tiene conto del carattere della casata.
+func _my_income(mine: int) -> int:
+	var f: float = game.sim._stat(game.my_house, Defs.STAT_SOLDI) if game.sim != null else Defs.stat_mult(game.my_house, Defs.STAT_SOLDI)
+	return int(Defs.income(mine) * f)
+
+
+func _pair(value: Label, unit: Label, icon := "") -> Control:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 4)
+	row.add_theme_constant_override("separation", 5)
+	if icon != "":
+		var g := Glyph.new(icon)
+		g.custom_minimum_size = Vector2(26, 26)
+		row.add_child(g)
 	row.add_child(value)
-	unit.size_flags_vertical = Control.SIZE_SHRINK_END
-	row.add_child(unit)
+	if unit != null:
+		unit.size_flags_vertical = Control.SIZE_SHRINK_END
+		row.add_child(unit)
 	return row
 
 
@@ -246,7 +272,7 @@ func _rank_panel() -> void:
 	rank_box = HBoxContainer.new()
 	rank_box.add_theme_constant_override("separation", 9)
 	r.add_child(rank_box)
-	for i in 8:
+	for i in Defs.HOUSE_COUNT:
 		var cell := HBoxContainer.new()
 		cell.add_theme_constant_override("separation", 3)
 		cell.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -294,13 +320,29 @@ func _castle_panel() -> void:
 	v.add_child(cap_row)
 	var q := HBoxContainer.new()
 	q.add_theme_constant_override("separation", 6)
-	q.add_child(UiStyle.label("In arrivo", 12, UiStyle.MUTED))
-	queue_bar = _bar(UiStyle.GOLD, 1.0, 5.0)
-	queue_bar.custom_minimum_size.x = 60
-	queue_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	q.add_child(queue_bar)
+	var q_lbl := UiStyle.label("In arrivo", 16, UiStyle.MUTED)
+	q_lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	q.add_child(q_lbl)
 	queue_row = HBoxContainer.new()
+	queue_row.add_theme_constant_override("separation", 4)
 	q.add_child(queue_row)
+	# una casella per soldato, in ordine: la prima ha la barra di avanzamento
+	for k in QUEUE_SLOTS:
+		var slot := PanelContainer.new()
+		slot.add_theme_stylebox_override("panel", UiStyle.panel_box(UiStyle.WALNUT_LIGHT, UiStyle.GOLD_DIM, 1))
+		slot.custom_minimum_size = Vector2(QUEUE_SIZE, QUEUE_SIZE)
+		slot.mouse_filter = Control.MOUSE_FILTER_PASS
+		var pic := TextureRect.new()
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.add_child(pic)
+		queue_row.add_child(slot)
+		queue_pics.append(pic)
+		if k == 0:
+			queue_bar = _bar(UiStyle.GOLD, 1.0, 5.0)
+			queue_bar.size_flags_vertical = Control.SIZE_SHRINK_END
+			slot.add_child(queue_bar)
 	queue_row.set_meta("wrap", q)
 	v.add_child(q)
 	enemy_hint = UiStyle.label("", 13, UiStyle.INK)
@@ -402,14 +444,15 @@ func _labeled_bar(title: String, bar: ProgressBar, value: Label) -> Control:
 func _recruit_card(t: int) -> Button:
 	var d: Dictionary = Defs.UNITS[t]
 	var b := UiStyle.button("", "%s: %d fiorini\n%s\nVita %d · Velocità %d" % [d.name, d.cost, d.desc, d.hp, int(d.speed)], _recruit.bind(t), CARD_W, CARD_H)
-	var pic := _portrait(t, 40)
-	pic.position = Vector2(2, 3)
+	var pic := _portrait(t, 44)
+	pic.position = Vector2(3, 4)
+	recruit_pics.append(pic)
 	b.add_child(pic)
 	var n := UiStyle.label(d.name, 11, UiStyle.INK)
-	n.position = Vector2(42, 4)
+	n.position = Vector2(50, 3)
 	b.add_child(n)
-	var c := UiStyle.label(str(d.cost), 16, UiStyle.GOLD, true)
-	c.position = Vector2(42, 21)
+	var c := UiStyle.label(str(d.cost), 18, UiStyle.GOLD, true)
+	c.position = Vector2(50, 24)
 	b.add_child(c)
 	recruit_btns.append(b)
 	recruit_cost.append(c)
@@ -540,13 +583,16 @@ func _bottom_center() -> void:
 	sh.alignment = BoxContainer.ALIGNMENT_CENTER
 	for k in Defs.BUILDING_COUNT:
 		sh.add_child(_shop_cell(k))
+	sh.visible = false  # i conteggi ora stanno nel tooltip di ogni potere: la barra è una sola
 	box.add_child(sh)
+	var board := UiStyle.panel(0)
+	board.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 4)
-	h.alignment = BoxContainer.ALIGNMENT_CENTER
+	h.add_theme_constant_override("separation", 6)
 	for k in Defs.POWER_COUNT:
 		h.add_child(_power_card(k))
-	box.add_child(h)
+	board.add_child(h)
+	box.add_child(board)
 	root.add_child(box)
 
 
@@ -558,7 +604,7 @@ func _shop_cell(k: int) -> Control:
 		if Defs.POWER_BUILDING[p] == k:
 			pw = Defs.POWERS[p].name
 	var cell := PanelContainer.new()
-	cell.add_theme_stylebox_override("panel", UiStyle.panel_box(Color(0.125, 0.085, 0.06, 0.82), UiStyle.GOLD_DIM, 2))
+	cell.add_theme_stylebox_override("panel", UiStyle.panel_box(UiStyle.WALNUT, UiStyle.GOLD_DIM, 2))
 	cell.custom_minimum_size = Vector2(50, 26)
 	cell.tooltip_text = "%s → %s\n%s" % [d.name, pw, d.desc]
 	cell.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -578,38 +624,48 @@ func _shop_cell(k: int) -> Control:
 	return cell
 
 
+const POWER_W := 108.0
+const POWER_H := 88.0
+
+
+## Un potere: tasto in alto a sinistra, costo a destra, icona grande al centro, nome sotto.
 func _power_card(k: int) -> Button:
 	var d: Dictionary = Defs.POWERS[k]
-	var b := UiStyle.button("", "[%s] %s: %d fede\n%s" % [d.key, d.name, d.cost, d.desc], func(): game.ctrl.start_action("power", k), 50.0, 50.0)
-	b.add_theme_stylebox_override("normal", UiStyle.panel_box(Color(0.125, 0.085, 0.06, 0.88), UiStyle.GOLD_DIM, 2))
+	var b := UiStyle.button("", "[%s] %s: %d fede\n%s" % [d.key, d.name, d.cost, d.desc], func(): game.ctrl.start_action("power", k), POWER_W, POWER_H)
 	var g := Glyph.new(POWER_GLYPHS[k])
-	g.position = Vector2(8, 6)
-	g.size = Vector2(34, 34)
+	g.position = Vector2((POWER_W - 48.0) * 0.5, 6)
+	g.size = Vector2(48, 48)
 	b.add_child(g)
-	var key := UiStyle.label(d.key, 11, UiStyle.GOLD, true)
-	key.position = Vector2(4, 1)
+	var key := UiStyle.label(d.key, 20, UiStyle.GOLD, true)
+	key.position = Vector2(9, 3)
 	b.add_child(key)
-	var cost := UiStyle.label(str(d.cost), 10, UiStyle.MUTED)
+	var cost := UiStyle.label(str(d.cost), 18, UiStyle.INK, true)
 	cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	cost.position = Vector2(0, 35)
-	cost.size = Vector2(46, 14)
+	cost.position = Vector2(POWER_W - 50.0, 4)
+	cost.size = Vector2(42, 22)
 	b.add_child(cost)
-	var cd := UiStyle.label("", 19, UiStyle.INK, true)
+	var nm := UiStyle.label(d.short, 16, UiStyle.INK, true)
+	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	nm.position = Vector2(2, 56)
+	nm.size = Vector2(POWER_W - 4.0, 22)
+	b.add_child(nm)
+	var cd := UiStyle.label("", 30, UiStyle.INK, true)
 	cd.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	cd.position = Vector2(0, 11)
-	cd.size = Vector2(50, 26)
-	cd.add_theme_constant_override("outline_size", 6)
+	cd.position = Vector2(0, 12)
+	cd.size = Vector2(POWER_W, 36)
+	cd.add_theme_constant_override("outline_size", 8)
 	cd.add_theme_color_override("font_outline_color", Color.BLACK)
 	b.add_child(cd)
 	var lock := Glyph.new("lucchetto")
-	lock.position = Vector2(32, 2)
-	lock.size = Vector2(16, 16)
+	lock.position = Vector2(POWER_W - 32.0, 4)
+	lock.size = Vector2(24, 24)
 	lock.visible = false
 	b.add_child(lock)
 	power_locks.append(lock)
 	power_btns.append(b)
 	power_glyphs.append(g)
 	power_cost.append(cost)
+	power_names.append(nm)
 	power_cd.append(cd)
 	return b
 
@@ -653,6 +709,14 @@ func _alert() -> void:
 	alert_btn.offset_top = 52
 	alert_btn.visible = false
 	root.add_child(alert_btn)
+	event_box = VBoxContainer.new()
+	event_box.add_theme_constant_override("separation", 6)
+	event_box.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	event_box.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	event_box.offset_right = -8
+	event_box.offset_top = EVENT_BOX_TOP
+	event_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(event_box)
 
 
 ## Un mio castello è appena finito sotto attacco: messaggio, corno e pulsante che lampeggia.
@@ -677,7 +741,7 @@ func _on_alert() -> void:
 
 func _cursor_tip() -> void:
 	tip = PanelContainer.new()
-	tip.add_theme_stylebox_override("panel", UiStyle.panel_box(Color(0.06, 0.04, 0.03, 0.92), UiStyle.GOLD_DIM, 6))
+	tip.add_theme_stylebox_override("panel", UiStyle.panel_box(UiStyle.WALNUT, UiStyle.GOLD_DIM, 6))
 	tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tip_lbl = UiStyle.label("", 14)
 	tip.add_child(tip_lbl)
@@ -745,7 +809,7 @@ func _build_pause() -> void:
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	pause_panel.add_child(dim)
 	var card := PanelContainer.new()
-	var sb := UiStyle.panel_box(Color(0.10, 0.07, 0.045, 1.0), UiStyle.GOLD_DIM, 0)
+	var sb := UiStyle.panel_box(UiStyle.WALNUT, UiStyle.GOLD_DIM, 0)
 	sb.content_margin_left = 34
 	sb.content_margin_right = 34
 	sb.content_margin_top = 28
@@ -852,7 +916,7 @@ func toggle_help() -> void:
 func toggle_ui() -> void:
 	hud_hidden = not hud_hidden
 	for n: Node in root.get_children():
-		if n is Control and n != alert_btn and n != notify_box and n != help and n != victory and n != drag_rect and n != tip:
+		if n is Control and n != alert_btn and n != event_box and n != notify_box and n != help and n != victory and n != drag_rect and n != tip:
 			(n as Control).visible = not hud_hidden
 	notify("Interfaccia nascosta: premi H per mostrarla" if hud_hidden else "", UiStyle.GOLD, 2.0)
 
@@ -1042,6 +1106,7 @@ func banner(title: String, sub: String, p: Vector3) -> void:
 	inner.add_theme_constant_override("separation", 0)
 	var t := UiStyle.label(title, 46, UiStyle.GOLD, true)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t.add_theme_font_override("font", UiStyle.display_font())
 	t.add_theme_constant_override("outline_size", 16)
 	t.add_theme_color_override("font_outline_color", Color(0.12, 0.05, 0.02))
 	inner.add_child(t)
@@ -1069,6 +1134,285 @@ func banner(title: String, sub: String, p: Vector3) -> void:
 	if game.fx and game.fx.sfx and game.ctrl and game.ctrl.cam:
 		var solemn: bool = title.begins_with("Processione") or title.begins_with("Scomunica")
 		game.fx.sfx.play("bell" if solemn else "horn", game.ctrl.cam.global_position, 2.0, 0.0)
+
+
+# ---------------------------------------------------------------- debug
+var debug_panel: PanelContainer
+
+
+## Tasto -: fa partire gli eventi a comando, per provarli senza aspettarli.
+func toggle_debug() -> void:
+	if not OS.is_debug_build():  # nelle versioni finite il pannello non esiste
+		return
+	if game.sim == null:
+		notify("Il debug è solo per chi ospita la partita", UiStyle.MUTED)
+		return
+	if debug_panel == null:
+		debug_panel = UiStyle.panel(10)
+		debug_panel.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+		debug_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		debug_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+		debug_panel.offset_right = -8
+		var v := VBoxContainer.new()
+		v.add_theme_constant_override("separation", 6)
+		debug_panel.add_child(v)
+		v.add_child(UiStyle.label("Debug: eventi  [-]", 20, UiStyle.GOLD, true))
+		for e in Defs.EVENTS.size():
+			var name_e := String(Defs.EVENTS[e][0])
+			v.add_child(UiStyle.button(name_e, "Fa partire subito: %s" % name_e, _debug_event.bind(e), 280.0, 40.0))
+		v.add_child(UiStyle.label("Il re sconfitto", 20, UiStyle.GOLD, true))
+		var kings := HBoxContainer.new()
+		kings.add_theme_constant_override("separation", 4)
+		v.add_child(kings)
+		for k: int in Defs.KING_DEATHS.size():
+			kings.add_child(UiStyle.button(str(k + 1), String(Defs.KING_DEATHS[k]) % ["Il Re", "…"], _debug_king.bind(k), 52.0, 40.0))
+		debug_panel.visible = false
+		root.add_child(debug_panel)
+	debug_panel.visible = not debug_panel.visible
+
+
+## Solo l'animazione: nessun castello cambia padrone.
+func _debug_king(v: int) -> void:
+	for c: Dictionary in game.castles:
+		var o: int = game.castle_owner(c.id)
+		if o != game.my_house:
+			game.fx.event("king_dead", c.king, float(o + 16 * game.my_house + 256 * v))
+			return
+
+
+func _debug_event(e: int) -> void:
+	if not game.sim.debug_event(e, game.my_house):
+		notify("Questo evento ora non può partire", UiStyle.DANGER_TEXT)
+
+
+# ---------------------------------------------------------------- il giornale
+const MINIATURES := ["sagra", "sciopero", "mamma", "processione", "palio", "scomunica"]
+const PAPER := Color(0.94, 0.87, 0.69)
+const PAPER_INK := Color(0.16, 0.09, 0.05)
+const PAPER_RED := Color(0.66, 0.11, 0.09)
+var paper_layer: Control
+var _paper_tw: Tween
+
+
+## Quando parte un evento il gioco si ferma per tutti e arriva la Gazzetta: l'evento in prima
+## pagina con la miniatura, e qualche notizia di cui si legge solo il titolo.
+func newspaper(ev: int, title: String, sub: String, picks: PackedInt32Array) -> void:
+	_close_paper()
+	var veil := ColorRect.new()
+	veil.color = Color(0.03, 0.02, 0.01, 0.62)
+	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	veil.mouse_filter = Control.MOUSE_FILTER_STOP
+	paper_layer = veil
+	root.add_child(veil)
+	var page := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = PAPER
+	sb.border_color = UiStyle.OUTLINE
+	sb.set_border_width_all(4)
+	sb.set_corner_radius_all(6)
+	sb.content_margin_left = 30
+	sb.content_margin_right = 30
+	sb.content_margin_top = 16
+	sb.content_margin_bottom = 16
+	sb.shadow_color = Color(0, 0, 0, 0.6)
+	sb.shadow_size = 18
+	sb.shadow_offset = Vector2(4, 8)
+	page.add_theme_stylebox_override("panel", sb)
+	page.custom_minimum_size = Vector2(1100, 0)
+	page.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	page.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	page.grow_vertical = Control.GROW_DIRECTION_BOTH
+	veil.add_child(page)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	page.add_child(v)
+	var head := _ink("La Gazzetta del Trecento", 62, PAPER_INK, UiStyle.display_font())
+	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(head)
+	var dateline := _ink("Anno Domini 1350  ·  Un soldo, o una gallina  ·  Esce quando capita", 19, PAPER_RED)
+	dateline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(dateline)
+	v.add_child(_paper_rule(3.0))
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 26)
+	v.add_child(cols)
+	# prima pagina: miniatura e capolettera miniato
+	var main_col := VBoxContainer.new()
+	main_col.custom_minimum_size = Vector2(660, 0)
+	main_col.add_theme_constant_override("separation", 8)
+	cols.add_child(main_col)
+	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", 12)
+	main_col.add_child(title_row)
+	var bare := title.lstrip("¡")
+	var cap := PanelContainer.new()
+	var cap_sb := StyleBoxFlat.new()
+	cap_sb.bg_color = PAPER_RED
+	cap_sb.border_color = UiStyle.GOLD
+	cap_sb.set_border_width_all(4)
+	cap_sb.set_content_margin_all(8)
+	cap.add_theme_stylebox_override("panel", cap_sb)
+	cap.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	var cap_l := _ink(bare.substr(0, 1), 66, UiStyle.GOLD, UiStyle.display_font())
+	cap_l.custom_minimum_size = Vector2(58, 0)
+	cap_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cap.add_child(cap_l)
+	title_row.add_child(cap)
+	var title_col := VBoxContainer.new()
+	title_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_row.add_child(title_col)
+	var big := _ink(bare.substr(1), 46, PAPER_INK)
+	big.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title_col.add_child(big)
+	var sub_l := _ink(sub, 23, PAPER_RED)
+	sub_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title_col.add_child(sub_l)
+	var path := "res://assets/ui/mini/%s.svg" % MINIATURES[clampi(ev, 0, MINIATURES.size() - 1)]
+	if ResourceLoader.exists(path):
+		var pic := TextureRect.new()
+		pic.texture = load(path)
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pic.custom_minimum_size = Vector2(660, 330)
+		main_col.add_child(pic)
+	# le altre notizie: titolo leggibile, il resto è inchiostro
+	var side := VBoxContainer.new()
+	side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	side.add_theme_constant_override("separation", 10)
+	cols.add_child(side)
+	for k: int in picks:
+		var h := _ink(String(News.HEADLINES[k]), 23, PAPER_INK)
+		h.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		h.custom_minimum_size = Vector2(320, 0)
+		side.add_child(h)
+		side.add_child(Greeked.new())
+		side.add_child(_paper_rule(1.5))
+	var foot := HBoxContainer.new()
+	var bar := ProgressBar.new()
+	bar.show_percentage = false
+	bar.max_value = Sim.NEWS_TIME
+	bar.value = Sim.NEWS_TIME
+	bar.custom_minimum_size = Vector2(0, 10)
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = PAPER_RED
+	var back := StyleBoxFlat.new()
+	back.bg_color = Color(PAPER_INK, 0.25)
+	bar.add_theme_stylebox_override("fill", fill)
+	bar.add_theme_stylebox_override("background", back)
+	foot.add_child(bar)
+	if not game.net_multiplayer:
+		var spacer := Control.new()
+		spacer.custom_minimum_size = Vector2(16, 0)
+		foot.add_child(spacer)
+		var cont := UiStyle.button("Volta pagina", "Si riprende a giocare", _resume_paper, 190.0, 46.0)
+		UiStyle.style_button(cont, Color(1.0, 0.76, 0.22), UiStyle.OUTLINE, Color(1.0, 0.86, 0.38))
+		for kk: String in ["font_color", "font_hover_color", "font_pressed_color"]:
+			cont.add_theme_color_override(kk, PAPER_INK)
+		cont.add_theme_font_size_override("font_size", 22)
+		foot.add_child(cont)
+	v.add_child(foot)
+	# il giornale arriva girando, come nei film
+	page.pivot_offset = Vector2(550, 340)
+	page.scale = Vector2(0.05, 0.05)
+	page.rotation = TAU * 2.0
+	_paper_tw = create_tween()
+	_paper_tw.tween_property(page, "scale", Vector2.ONE, 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_paper_tw.parallel().tween_property(page, "rotation", -0.012, 0.55).set_ease(Tween.EASE_OUT)
+	_paper_tw.parallel().tween_property(bar, "value", 0.0, Sim.NEWS_TIME)
+	_paper_tw.tween_callback(_close_paper).set_delay(Sim.NEWS_TIME - 0.55)
+	if game.fx and game.fx.sfx and game.ctrl and game.ctrl.cam:
+		game.fx.sfx.play("horn", game.ctrl.cam.global_position, 2.0, 0.0)
+
+
+func _resume_paper() -> void:
+	if game.sim != null:
+		game.sim.news_t = 0.0
+	_close_paper()
+
+
+func _close_paper() -> void:
+	if _paper_tw != null and _paper_tw.is_valid():
+		_paper_tw.kill()
+	if is_instance_valid(paper_layer):
+		paper_layer.queue_free()
+	paper_layer = null
+
+
+func _ink(text: String, fs: int, col: Color, f: Font = null) -> Label:
+	var l := UiStyle.label(text, fs, col, true)
+	l.add_theme_constant_override("outline_size", 0)
+	if f != null:
+		l.add_theme_font_override("font", f)
+	return l
+
+
+func _paper_rule(h: float) -> ColorRect:
+	var r := ColorRect.new()
+	r.color = PAPER_INK
+	r.custom_minimum_size = Vector2(0, h)
+	return r
+
+
+## Righe di «testo» illeggibile sotto i titoli: inchiostro e basta.
+class Greeked:
+	extends Control
+	func _init() -> void:
+		custom_minimum_size = Vector2(0, 46)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var ink := Color(0.16, 0.09, 0.05, 0.42)
+		for row in 4:
+			var y := 5.0 + row * 11.0
+			var end := size.x * (0.62 if row == 3 else 1.0)
+			var x := 0.0
+			var seed_v := row * 7 + 3
+			while x < end:
+				var w := 10.0 + float((seed_v * 31 + int(x)) % 28)
+				draw_line(Vector2(x, y), Vector2(minf(x + w, end), y), ink, 3.0)
+				x += w + 6.0
+
+
+func event_mark(title: String, p: Vector3, life: float) -> void:
+	if life <= 0.0:  # l'evento è finito prima del previsto (il Palio ha un vincitore)
+		for k in range(event_icons.size() - 1, -1, -1):
+			if (event_icons[k].p as Vector3).distance_to(p) < 1.0:
+				_event_remove(k)
+		return
+	if p == Vector3.ZERO or event_box == null:
+		return
+	var b := UiStyle.button("", "%s\nClicca per andarci" % title, _go_event.bind(p), 44.0, 44.0)
+	var g := Glyph.new("evento")
+	g.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 7)
+	b.add_child(g)
+	event_box.add_child(b)
+	event_icons.append({"btn": b, "p": p, "t": life})
+	if event_icons.size() > EVENT_MAX:
+		_event_remove(0)
+
+
+func _event_remove(k: int) -> void:
+	(event_icons[k].btn as Button).queue_free()
+	event_icons.remove_at(k)
+
+
+func _go_event(p: Vector3) -> void:
+	game.ctrl.focus = p
+	game.ctrl.target_dist = 75.0
+
+
+func _tick_event_icons(dt: float) -> void:
+	if game.sim != null and game.sim.paused:
+		return
+	for k in range(event_icons.size() - 1, -1, -1):
+		var e: Dictionary = event_icons[k]
+		e.t = float(e.t) - dt
+		if float(e.t) <= 0.0:
+			_event_remove(k)
+		elif float(e.t) < EVENT_BLINK:  # sta per finire
+			(e.btn as Button).modulate.a = 0.55 + 0.45 * sin(Time.get_ticks_msec() / 120.0)
 
 
 func notify(text: String, col: Color, life := 4.0) -> void:
@@ -1152,21 +1496,21 @@ func on_state() -> void:
 		gold_lbl.text = str(game.gold())
 		var spend: float = game.repair_spend()
 		if spend > 0.0:
-			income_lbl.text = "fiorini +%d/s  −%d riparazioni" % [int(Defs.income(mine)), ceili(spend)]
+			income_lbl.text = "+%d/s  −%d mura" % [_my_income(mine), ceili(spend)]
 			income_lbl.add_theme_color_override("font_color", UiStyle.DANGER_TEXT)
 			income_lbl.tooltip_text = "Le riparazioni in corso consumano i fiorini: premi R sul castello per fermarle"
 		else:
-			income_lbl.text = "fiorini +%d/s" % int(Defs.income(mine))
+			income_lbl.text = "+%d/s" % _my_income(mine)
 			income_lbl.add_theme_color_override("font_color", UiStyle.MUTED)
 			income_lbl.tooltip_text = ""
 		faith_lbl.text = str(game.faith())
 		var fr: float = game.faith_rate()
-		faith_rate_lbl.text = ("fede +%.1f/s" % fr).replace(".", ",") if fr > 0.0 else "fede · senza chiesa"
+		faith_rate_lbl.text = ("+%.1f/s" % fr).replace(".", ",") if fr > 0.0 else "senza chiesa"
 		faith_rate_lbl.add_theme_color_override("font_color", UiStyle.MUTED if fr > 0.0 else UiStyle.DANGER_TEXT)
 		var me_row: Array = game.state[1][game.my_house]
 		var excom: int = int(me_row[10]) if me_row.size() > 10 else 0
 		if excom > 0:
-			faith_rate_lbl.text = "fede · scomunicati %ds" % excom
+			faith_rate_lbl.text = "scomunicati %ds" % excom
 		faith_lbl.tooltip_text = ("Fede +%.1f/s da chiese e frati che pregano. Serve per i poteri (tasti 1-5)" % fr) if fr > 0.0 else "Niente Fede: costruisci una chiesa e recluta frati che le preghino accanto"
 		castles_lbl.text = "%d/%d" % [mine, cs.size()]
 		troops_lbl.text = "%d/%d" % [units, Defs.HOUSE_UNIT_CAP]
@@ -1195,13 +1539,13 @@ func on_state() -> void:
 
 
 func top_ready() -> bool:
-	return gold_lbl != null and rank_rows.size() == 8 and castle_panel != null and army_panel != null and alert_btn != null and truce_lbl != null and not power_btns.is_empty()
+	return gold_lbl != null and rank_rows.size() == Defs.HOUSE_COUNT and castle_panel != null and army_panel != null and alert_btn != null and truce_lbl != null and not power_btns.is_empty()
 
 
 func _update_rank(counts: Dictionary, hs: Array) -> void:
-	var order: Array = range(8)
+	var order: Array = range(Defs.HOUSE_COUNT)
 	order.sort_custom(func(a: int, b: int): return int(counts.get(a, 0)) > int(counts.get(b, 0)) or (int(counts.get(a, 0)) == int(counts.get(b, 0)) and a < b))
-	for i in 8:
+	for i in Defs.HOUSE_COUNT:
 		var t: int = order[i]
 		var r: Dictionary = rank_rows[i]
 		var n: int = counts.get(t, 0)
@@ -1331,6 +1675,7 @@ func _update_badges() -> void:
 
 func _process(dt: float) -> void:
 	_update_badges()
+	_tick_event_icons(dt)
 	if _portrait_frames > 0:
 		_portrait_frames -= 1
 		if _portrait_frames == 0:
@@ -1404,7 +1749,12 @@ func pending_text() -> String:
 	if pend.is_empty():
 		return ""
 	match String(pend.kind):
-		"power": return "Clic sinistro: %s  ·  Clic destro: annulla" % Defs.POWERS[int(pend.id)].name
+		"power":
+			if not game.ctrl.aim.is_empty():
+				return "Potenza %d%%  ·  Rilascia per lanciare" % int(game.ctrl.aim_power() * 100.0)
+			if int(pend.id) == Defs.P_PARMIGIANO:
+				return "Tieni premuto e trascina: direzione e potenza  ·  Clic: tiro automatico  ·  Destro: annulla"
+			return "Clic sinistro: %s  ·  Clic destro: annulla" % Defs.POWERS[int(pend.id)].name
 		"mangano": return "Clic sinistro: tira la pietra  ·  Clic destro: annulla"
 		"oil": return "Clic sinistro: versa l'olio  ·  Clic destro: annulla"
 		"build":
@@ -1483,16 +1833,12 @@ func _refresh_castle(cid: int) -> void:
 	qw.visible = mine and not q.is_empty()
 	if qw.visible:
 		queue_bar.value = c[9]
-		var names: Dictionary = {}
-		var order: Array = []
-		for t: int in q:
-			if not names.has(t):
-				order.append(t)
-			names[t] = int(names.get(t, 0)) + 1
-		var text := ""
-		for t: int in order:
-			text += "%d %s  " % [names[t], Defs.UNITS[t].name]
-		_set_queue_text(text.strip_edges())
+		for k in QUEUE_SLOTS:
+			var slot := queue_pics[k].get_parent() as Control
+			slot.visible = k < q.size()
+			if slot.visible:
+				queue_pics[k].texture = recruit_pics[int(q[k])].texture
+				slot.tooltip_text = String(Defs.UNITS[int(q[k])].name)
 	tab_bar.visible = mine
 	recruit_box.visible = mine and castle_tab == 0
 	build_box.visible = mine and castle_tab == 1
@@ -1558,16 +1904,6 @@ func _my_troops_and_queue() -> int:
 	return n
 
 
-func _set_queue_text(text: String) -> void:
-	var l: Label
-	if queue_row.get_child_count() == 0:
-		l = UiStyle.label("", 13, UiStyle.INK)
-		queue_row.add_child(l)
-	else:
-		l = queue_row.get_child(0)
-	l.text = text
-
-
 func _set_tab(k: int) -> void:
 	castle_tab = k
 	for i in tab_btns.size():
@@ -1591,10 +1927,10 @@ func _build_card(k: int) -> Button:
 	g.size = Vector2(34, 34)
 	b.add_child(g)
 	var n := UiStyle.label(d.short, 11, UiStyle.INK)
-	n.position = Vector2(42, 4)
+	n.position = Vector2(50, 3)
 	b.add_child(n)
-	var c := UiStyle.label(str(d.cost), 16, UiStyle.GOLD, true)
-	c.position = Vector2(42, 21)
+	var c := UiStyle.label(str(d.cost), 18, UiStyle.GOLD, true)
+	c.position = Vector2(50, 24)
 	b.add_child(c)
 	var cnt := UiStyle.label("", 13, UiStyle.INK)
 	cnt.position = Vector2(CARD_W - 28, 24)
@@ -1669,21 +2005,11 @@ func _refresh_powers() -> void:
 			power_glyphs[k].dim = dim
 			power_glyphs[k].queue_redraw()
 		power_cd[k].text = str(ceili(cd)) if cd > 0.0 and not locked else ""
-		# bloccato: al posto del costo, la bottega che serve; senza Fede: costo in rosso
-		if locked:
-			power_cost[k].text = Defs.BUILDINGS[Defs.POWER_BUILDING[k]].short
-			power_cost[k].add_theme_font_size_override("font_size", 9)
-			power_cost[k].add_theme_color_override("font_color", UiStyle.GOLD)
-			power_cost[k].horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			power_cost[k].position = Vector2(0, 36)
-			power_cost[k].size = Vector2(50, 14)
-		else:
-			power_cost[k].horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			power_cost[k].position = Vector2(0, 35)
-			power_cost[k].size = Vector2(46, 14)
-			power_cost[k].text = str(d.cost)
-			power_cost[k].add_theme_font_size_override("font_size", 10)
-			power_cost[k].add_theme_color_override("font_color", UiStyle.DANGER_TEXT if poor else UiStyle.MUTED)
+		# bloccato: al posto del nome, la bottega che serve; senza Fede: costo in rosso
+		power_cost[k].text = "" if locked else str(d.cost)
+		power_cost[k].add_theme_color_override("font_color", UiStyle.DANGER_TEXT if poor else UiStyle.INK)
+		power_names[k].text = String(Defs.BUILDINGS[Defs.POWER_BUILDING[k]].short) if locked else String(d.short)
+		power_names[k].add_theme_color_override("font_color", UiStyle.GOLD if locked else UiStyle.INK)
 	var have: Array[int] = []
 	have.resize(Defs.BUILDING_COUNT)
 	have.fill(0)

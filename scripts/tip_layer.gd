@@ -20,7 +20,7 @@ var hover_t := 0.0
 func _ready() -> void:
 	layer = 120
 	box = PanelContainer.new()
-	var sb := UiStyle.panel_box(Color(0.10, 0.07, 0.045, 0.98), UiStyle.GOLD_DIM, 0)
+	var sb := UiStyle.panel_box(UiStyle.WALNUT, UiStyle.GOLD_DIM, 0)
 	sb.set_content_margin_all(0)
 	sb.content_margin_left = 12
 	sb.content_margin_right = 12

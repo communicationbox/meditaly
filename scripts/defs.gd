@@ -12,7 +12,9 @@ const SEA := 10
 const CHUNK := 32
 const PORT := 27015
 const SIM_HZ := 15.0
-const NEUTRAL := 8
+## Casate giocabili; i Comuni liberi (neutrali) vengono subito dopo in HOUSES.
+const HOUSE_COUNT := 9
+const NEUTRAL := 9
 ## Una modifica è (indice << EDIT_SHIFT) | materiale in un int64 (PackedInt64Array):
 ## l'indice arriva a WX * WZ * WY (circa 133 milioni, 28 bit) e il materiale usa 6 bit.
 const EDIT_SHIFT := 6
@@ -82,35 +84,59 @@ const PO := [[7.7,45.05],[8.6,45.1],[9.7,45.05],[10.8,45.0],[11.7,45.0],[12.45,4
 
 # ---------------------------------------------------------------- casate e castelli
 const HOUSES := [
-	{"name": "Savoia", "city": "Torino", "motto": "La croce bianca delle Alpi", "color": Color(0.13, 0.28, 0.72)},
-	{"name": "Visconti", "city": "Milano", "motto": "Il biscione che non perdona", "color": Color(0.14, 0.58, 0.30)},
-	{"name": "Serenissima", "city": "Venezia", "motto": "Il leone di San Marco", "color": Color(0.72, 0.09, 0.14)},
-	{"name": "Doria", "city": "Genova", "motto": "Signori del mare", "color": Color(0.94, 0.94, 0.90)},
-	{"name": "Medici", "city": "Firenze", "motto": "Banchieri, mecenati e intrighi", "color": Color(0.48, 0.20, 0.72)},
-	{"name": "Papato", "city": "Roma", "motto": "Le chiavi del cielo, e di molte casse", "color": Color(0.96, 0.76, 0.10)},
-	{"name": "Angioini", "city": "Napoli", "motto": "I gigli di Francia sotto il Vesuvio", "color": Color(0.25, 0.65, 0.92)},
-	{"name": "Normanni", "city": "Palermo", "motto": "Venuti dal nord, rimasti per il sole", "color": Color(0.94, 0.45, 0.08)},
-	{"name": "Comuni liberi", "city": "", "color": Color(0.42, 0.42, 0.42)},
+	{"name": "Savoia", "stats": [3, 3, 3, 3], "city": "Torino", "motto": "La croce bianca delle Alpi", "color": Color(0.13, 0.28, 0.72)},
+	{"name": "Visconti", "stats": [3, 4, 3, 2], "city": "Milano", "motto": "Il biscione che non perdona", "color": Color(0.14, 0.58, 0.30)},
+	{"name": "Serenissima", "stats": [5, 2, 3, 2], "city": "Venezia", "motto": "Il leone di San Marco", "color": Color(0.72, 0.09, 0.14)},
+	{"name": "Doria", "stats": [5, 3, 2, 2], "city": "Genova", "motto": "Signori del mare", "color": Color(0.94, 0.94, 0.90)},
+	{"name": "Medici", "stats": [5, 2, 2, 3], "city": "Firenze", "motto": "Banchieri, mecenati e intrighi", "color": Color(0.48, 0.20, 0.72)},
+	{"name": "Papato", "stats": [2, 3, 2, 5], "city": "Roma", "motto": "Le chiavi del cielo, e di molti tesori", "color": Color(0.96, 0.76, 0.10)},
+	{"name": "Angioini", "stats": [2, 3, 4, 3], "city": "Napoli", "motto": "I gigli di Francia sotto il Vesuvio", "color": Color(0.25, 0.65, 0.92)},
+	{"name": "Normanni", "stats": [2, 4, 3, 3], "city": "Palermo", "motto": "Venuti dal nord, rimasti per il sole", "color": Color(0.94, 0.45, 0.08)},
+	{"name": "Ruffo", "stats": [3, 2, 4, 3], "city": "Cosenza", "motto": "Tra due mari e parecchi bergamotti", "color": Color(0.93, 0.35, 0.62)},
+	{"name": "Comuni liberi", "stats": [3, 3, 3, 3], "city": "", "color": Color(0.42, 0.42, 0.42)},
 ]
 
 ## gate: 0=+Z 1=-Z 2=+X 3=-X (sud, nord, est, ovest)
 const CASTLES := [
 	{"name": "Torino", "lon": 7.35, "lat": 45.15, "house": 0, "wall": STONE, "gate": 2},
-	{"name": "Milano", "lon": 9.6, "lat": 45.75, "house": 1, "wall": BRICK, "gate": 0},
+	{"name": "Milano", "lon": 9.6, "lat": 45.75, "house": 1, "wall": BRICK, "gate": 0, "guard": 4},
 	{"name": "Venezia", "lon": 12.2, "lat": 45.55, "house": 2, "wall": MARBLE, "gate": 3},
-	{"name": "Genova", "lon": 8.85, "lat": 44.55, "house": 3, "wall": STONE2, "gate": 1, "guard": 4},
+	{"name": "Genova", "lon": 8.85, "lat": 44.55, "house": 3, "wall": STONE2, "gate": 1, "guard": 9},
 	{"name": "Bologna", "lon": 11.3, "lat": 44.55, "house": NEUTRAL, "wall": BRICK, "gate": 1},
 	{"name": "Firenze", "lon": 11.3, "lat": 43.35, "house": 4, "wall": STONE, "gate": 1, "guard": 3},
 	{"name": "Ancona", "lon": 13.2, "lat": 43.45, "house": NEUTRAL, "wall": BRICK, "gate": 3},
-	{"name": "Roma", "lon": 12.75, "lat": 41.85, "house": 5, "wall": MARBLE, "gate": 1, "guard": 3},
+	{"name": "Roma", "lon": 12.75, "lat": 41.85, "house": 5, "wall": MARBLE, "gate": 1, "guard": 7},
 	{"name": "Napoli", "lon": 14.3, "lat": 41.15, "house": 6, "wall": STONE2, "gate": 1},
 	{"name": "Bari", "lon": 16.55, "lat": 41.0, "house": NEUTRAL, "wall": STONE, "gate": 3, "guard": 6},
 	{"name": "Palermo", "lon": 13.5, "lat": 37.85, "house": 7, "wall": BRICK, "gate": 0},
-	{"name": "Cagliari", "lon": 9.15, "lat": 39.5, "house": NEUTRAL, "wall": STONE2, "gate": 1},
+	{"name": "Cagliari", "lon": 9.15, "lat": 39.5, "house": NEUTRAL, "wall": STONE2, "gate": 1, "guard": 6},
+	{"name": "Cosenza", "lon": 16.45, "lat": 39.3, "house": 8, "wall": STONE, "gate": 1},
 ]
 
+## Didascalie delle uscite di scena del re: 0 gabinetto, 1 botte, 2 trono a molla, 3 moglie, 4 tinozza.
+const KING_DEATHS := [
+	"%s di %s, sorpreso sul trono. Quello piccolo.",
+	"%s di %s, scoperto nella botte del vino. Era quasi vuota.",
+	"%s di %s, tradito dal trono a molla. Il collaudo era previsto per martedì.",
+	"%s di %s: arriva la moglie, e la guerra finisce lì.",
+	"%s di %s tenta la fuga via acqua. In una tinozza.",
+]
+
+## Caratteri delle casate: cubetti da 1 a 5, lo stesso totale per tutte (3 = nella media).
+enum { STAT_SOLDI, STAT_FORZA, STAT_VELOCITA, STAT_FEDE }
+const STAT_NAMES := ["Soldi", "Forza", "Velocità", "Fede"]
+const STAT_TOTAL := 12
+## Quanto vale un cubetto sopra o sotto la media. La Forza conta due volte: danni fatti e subiti.
+const STAT_STEP := [0.10, 0.05, 0.07, 0.20]
+
+static func stat_mult(team: int, stat: int) -> float:
+	return 1.0 + float(int(HOUSES[team].stats[stat]) - 3) * float(STAT_STEP[stat])
+
+## Colore delle frasi nei fumetti, per categoria: scuri quanto basta per leggerli sul crema.
+const SAY_COLORS := [Color("b71c1c"), Color("6a1b9a"), Color("37474f"), Color("ad1457"), Color("a84300"), Color("1565c0"), Color("c2185b"), Color("1b6e20"), Color("5e35b1"), Color("5d4037"), Color("c62828"), Color("00695c"), Color("0277bd"), Color("b71c1c"), Color("1b6e20")]
+
 ## Coppie di castelli collegate da strade.
-const ROADS := [[0,1],[0,3],[1,3],[1,2],[1,4],[2,4],[4,5],[3,5],[4,6],[5,6],[5,7],[6,7],[7,8],[8,9],[6,8]]
+const ROADS := [[0,1],[0,3],[1,3],[1,2],[1,4],[2,4],[4,5],[3,5],[4,6],[5,6],[5,7],[6,7],[7,8],[8,9],[6,8],[8,12],[9,12]]
 
 # ---------------------------------------------------------------- unità
 enum { FANTE, BALESTRIERE, CAVALIERE, ARIETE, CATAPULTA, BOMBARDA, FRATE, NONNA, MENESTRELLO, UNIT_TYPES }
@@ -255,7 +281,7 @@ enum { SHOT_STONE, SHOT_BALL, SHOT_METEOR, SHOT_COW }
 
 # ---------------------------------------------------------------- si deve ridere
 ## Fumetti dei soldati, per categoria. Si vedono sopra la testa di chi parla.
-enum { SAY_CARICA, SAY_FERITO, SAY_MORTE, SAY_UBRIACO, SAY_SAGRA, SAY_SCIOPERO, SAY_MAMMA, SAY_SFOTTO, SAY_NONNA, SAY_FRATE, SAY_PANICO, SAY_VITTORIA, SAY_PALIO }
+enum { SAY_CARICA, SAY_FERITO, SAY_MORTE, SAY_UBRIACO, SAY_SAGRA, SAY_SCIOPERO, SAY_MAMMA, SAY_SFOTTO, SAY_NONNA, SAY_FRATE, SAY_PANICO, SAY_VITTORIA, SAY_PALIO, SAY_CONTRO, SAY_PER_CAPO }
 const SAY := [
 	["All'attaccoooo!", "Per la mamma!", "Ma chi me l'ha fatto fare", "Io vado, eh. Voi venite?", "Dai che è venerdì!", "Ci pensa la fanteria!", "Avanti, Savoia! Ah no, sbagliato", "Prima i balestrieri!", "Tenetemi, che lo meno!"],
 	["Ahia!", "Mamma mia!", "Un medicoooo", "Era solo un graffio. Ora no", "Ho finito i cerotti", "Mi gira la testa", "Questo lo dico al sindacato"],
@@ -270,6 +296,8 @@ const SAY := [
 	["AAAAAH!", "IL FORMAGGIO!", "Si salvi chi può!", "Mamma, la forma!", "Non di qua, non di qua!", "È stagionato 36 mesi!"],
 	["Abbiamo vintooo!", "Il mastio è nostro!", "Olè olè olè!", "Offro io! Ah no", "Campioni d'Italia!", "Chi è il re adesso?"],
 	["Hiiii!", "Largo, largo!", "Il drappo è mio!", "Dai Morello, dai!", "Chi arriva ultimo paga"],
+	["{n}, apri: è la consegna!", "Dov'è {n}? Gli dobbiamo due parole", "{n}, metti su l'acqua: siamo in cinquanta", "Salutatemi {n}!", "{n}, hai lasciato il portone aperto?", "Ci manda tua zia, {n}", "{n}, si può? Permesso!", "Chi ha votato {n}?", "{n}, conta i merli finché puoi", "Questo è per {n}, con affetto"],
+	["Per {n}! E per la paga!", "{n} ha detto di correre", "Viva {n}, finché paga", "Se perdiamo è colpa di {n}", "{n}, guarda come picchio!", "Lo faccio per {n}. E per il pranzo", "{n} ci guarda: fingete di sapere cosa fate", "Avanti, {n} ha un piano. Forse", "{n} ci ha promesso le ferie", "Agli ordini di {n}, più o meno"],
 ]
 ## Sfottò fra giocatori: tasti 6-0. Il server li manda a tutti.
 const TAUNTS := [

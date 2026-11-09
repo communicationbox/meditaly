@@ -190,6 +190,7 @@ func _create_sim() -> void:
 	sim.ai_aggression = float(dd.aggr)
 	sim.ai_income = float(dd.income)
 	sim.ai_cap_mult = float(dd.cap)
+	sim.equal_houses = Settings.equal_houses
 	state = sim.state_array()
 
 
@@ -266,6 +267,7 @@ func _exec_cmd(peer: int, kind: String, a: Array) -> void:
 		"mangano": if _valid_castle(a[0]): sim.cmd_mangano(team, a[0], _clamp_p(a[1]))
 		"oil": if _valid_castle(a[0]): sim.cmd_oil(team, a[0], _clamp_p(a[1]))
 		"power": sim.cmd_power(team, a[0], _clamp_p(a[1]))
+		"power_aim": sim.cmd_power(team, a[0], _clamp_p(a[1]), a[2])
 		"build": sim.cmd_build(team, a[0], _clamp_p(a[1]))
 		"taunt": sim.cmd_taunt(team, a[0])
 
@@ -279,6 +281,7 @@ func _args_ok(kind: String, a: Array) -> bool:
 		"order": want = [TYPE_PACKED_INT32_ARRAY, TYPE_VECTOR3, TYPE_BOOL]
 		"garrison", "repair", "taunt": want = [TYPE_INT]
 		"mangano", "oil", "power": want = [TYPE_INT, TYPE_VECTOR3]
+		"power_aim": want = [TYPE_INT, TYPE_VECTOR3, TYPE_VECTOR3]
 		_: return false
 	if a.size() != want.size():
 		return false
@@ -299,10 +302,10 @@ func _clamp_p(p: Vector3) -> Vector3:
 # ---------------------------------------------------------------- ingresso giocatori
 func _assign(peer: int, pref: int, pname: String) -> int:
 	var h: int = -1
-	if pref >= 0 and pref < 8 and sim.houses[pref].ai and sim.houses[pref].alive:
+	if pref >= 0 and pref < Defs.HOUSE_COUNT and sim.houses[pref].ai and sim.houses[pref].alive:
 		h = pref
 	else:
-		for k in 8:
+		for k in Defs.HOUSE_COUNT:
 			if sim.houses[k].ai and sim.houses[k].alive:
 				h = k
 				break
@@ -401,16 +404,20 @@ func r_fx(kind: String, p: Vector3, a: float) -> void:
 
 
 ## Evento a sorpresa: grande titolo al centro dello schermo per tutti.
-func banner_all(title: String, sub: String, p: Vector3) -> void:
-	r_banner(title, sub, p)
+func banner_all(title: String, sub: String, p: Vector3, life := 0.0, ev := 0, news := PackedInt32Array()) -> void:
+	r_banner(title, sub, p, life, ev, news)
 	if _has_peers():
-		r_banner.rpc(title, sub, p)
+		r_banner.rpc(title, sub, p, life, ev, news)
 
 
 @rpc("authority", "reliable")
-func r_banner(title: String, sub: String, p: Vector3) -> void:
+func r_banner(title: String, sub: String, p: Vector3, life: float, ev: int, news: PackedInt32Array) -> void:
 	if hud:
-		hud.banner(title, sub, p)
+		if life > 0.0:
+			hud.newspaper(ev, title, sub, news)
+		else:
+			hud.banner(title, sub, p)
+		hud.event_mark(title, p, life)
 
 
 func msg_all(text: String, col: Color) -> void:

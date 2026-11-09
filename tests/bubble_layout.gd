@@ -43,6 +43,8 @@ func _run() -> void:
 	sim.ai_enabled = false
 	sim.events_enabled = false
 	sim.truce_until = 0.0
+	g.fx.bubble_cooldown = 0.0
+	g.fx.bubble_repeat = 0.0
 	if g.tutorial:
 		g.tutorial.queue_free()
 	var mi: Dictionary = g.castles[1]

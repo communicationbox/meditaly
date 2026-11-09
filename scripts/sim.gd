@@ -99,7 +99,14 @@ var paused := false
 ## Difficoltà: rendita dell'IA rispetto a un umano e moltiplicatore del suo esercito massimo.
 var ai_income := 0.8
 var ai_cap_mult := 1.0
+var news_t := 0.0  # secondi di fermo per il giornale, non si salva
+const NEWS_TIME := 14.0
+const NEWS_ITEMS := 3
+var _cur_event := 0
+var _last_king_death := -1
+var equal_houses := false  # opzione del menu: spegne i caratteri delle casate
 var ai_saving := {}  # casata -> macchina d'assedio per cui sta risparmiando (non si salva)
+var _isolation := {}  # castello -> fattore di isolamento, calcolato una volta dalla mappa
 var ai_stage := {}  # casata -> raduno in corso {c, pos, ids, t}; non si salva: al caricamento riparte
 var bards: Array[U] = []
 ## Edifici costruiti (fuori dalle mura), di chi li ha costruiti.
@@ -127,6 +134,10 @@ const AI_LEADER_FACTOR := 0.75
 const QUIET_START := 120.0
 const QUIET_FULL := 480.0
 const QUIET_MIN := 0.3
+## Un castello lontano da tutti (le isole) non deve essere al sicuro per geografia: la sua distanza
+## viene ridotta quanto più il vicino più prossimo supera ISOLATION_REF, fino a ISOLATION_MIN volte.
+const ISOLATION_REF := 240.0
+const ISOLATION_MIN := 0.35
 const TOWER_DAMAGE := 6.0
 ## Difese automatiche: ogni torre (e il mastio) tira TOWER_SHOTS frecce a bersagli diversi ogni TOWER_CD s,
 ## prima alle macchine d'assedio. Il mangano del mastio tira da solo dove i nemici sono ammassati,
@@ -168,7 +179,7 @@ var procession_until := 0.0
 var palio_pos := Vector3.ZERO
 var palio_until := 0.0
 var say_cd := 0.0
-var taunt_cd: Array = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+var taunt_cd: Array = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 ## Uno sfottò ogni tanto, non a raffica.
 const TAUNT_CD := 15.0
 ## Falso nei test di bilanciamento: gli eventi cambierebbero i risultati.
@@ -432,7 +443,7 @@ func cmd_oil(team: int, cid: int, p: Vector3) -> void:
 
 
 # ---------------------------------------------------------------- poteri
-func cmd_power(team: int, kind: int, p: Vector3) -> void:
+func cmd_power(team: int, kind: int, p: Vector3, aim := Vector3.ZERO) -> void:
 	if kind < 0 or kind >= Defs.POWER_COUNT:
 		return
 	var h: Dictionary = houses[team]
@@ -456,7 +467,10 @@ func cmd_power(team: int, kind: int, p: Vector3) -> void:
 			for k in 12:
 				sched.append({"t": 0.15 + k * 0.22, "kind": "cow", "pos": p, "team": team})
 		Defs.P_PARMIGIANO:
-			_spawn_wheel(team, p)
+			if Vector2(aim.x, aim.z).length() >= WHEEL_AIM_MIN:
+				_spawn_wheel_aimed(team, p, aim)
+			else:
+				_spawn_wheel(team, p)
 		Defs.P_VINO:
 			for u in ulist:
 				if u.team == team and u.pos.distance_to(p) < 34.0:
@@ -520,11 +534,28 @@ func _hname(team: int) -> String:
 ## Margine attorno a un castello proprio entro cui la forma si ferma (mura, torri e raggio della forma).
 const WHEEL_OWN_MARGIN := R + 8.0
 const WHEEL_START_DIST := 55.0
+## Lancio a mano: quanto va trascinato il mouse (in metri di mappa) e la velocità che ne esce.
+const WHEEL_AIM_MIN := 6.0
+const WHEEL_AIM_MAX := 80.0
+const WHEEL_SPEED_MIN := 22.0
+const WHEEL_SPEED_MAX := 64.0
 const WHEEL_OVERSHOOT := 70.0
 ## Danno a chi viene travolto (una volta sola per forma): un Fante sopravvive di un soffio.
 const WHEEL_DMG := 38.0
 ## Blocchi di muro che la forma può scavare prima di sbriciolarsi.
 const WHEEL_WALL_BUDGET := 260 * CS
+
+
+## Tiro scelto da chi gioca: parte da dove si è premuto, va dove si è trascinato, e più lungo
+## è il vettore più corre.
+func _spawn_wheel_aimed(team: int, p: Vector3, aim: Vector3) -> void:
+	var flat := Vector3(aim.x, 0.0, aim.z)
+	var k := clampf((flat.length() - WHEEL_AIM_MIN) / (WHEEL_AIM_MAX - WHEEL_AIM_MIN), 0.0, 1.0)
+	var s := Vector3(clampf(p.x, 8.0, Defs.WX - 8.0), 0.0, clampf(p.z, 8.0, Defs.WZ - 8.0))
+	s.y = world.top_y(int(s.x), int(s.z)) + 8.0
+	var vel := flat.normalized() * lerpf(WHEEL_SPEED_MIN, WHEEL_SPEED_MAX, k)
+	wheels.append({"id": next_proj, "pos": s, "vel": vel, "t": 11.0, "team": team, "roll": 0.0, "hit": {}, "kills": 0, "carved": 0})
+	next_proj += 1
 
 
 ## La forma non deve passare sui propri castelli: tra 16 direzioni sceglie la più lontana da loro,
@@ -569,6 +600,9 @@ func _spawn_wheel(team: int, p: Vector3) -> void:
 func _physics_process(dt: float) -> void:
 	if paused:
 		return
+	if news_t > 0.0:  # tutti leggono il giornale: la guerra aspetta
+		news_t -= dt
+		return
 	_accum += dt
 	var step := 1.0 / Defs.SIM_HZ
 	if _accum >= step:
@@ -609,7 +643,7 @@ func tick(dt: float) -> void:
 	_ai_t += dt
 	if _ai_t >= 0.25:
 		_ai_t = 0.0
-		_ai_i = (_ai_i + 1) % 8
+		_ai_i = (_ai_i + 1) % Defs.HOUSE_COUNT
 		if ai_enabled and houses[_ai_i].ai and houses[_ai_i].alive:
 			_ai_tick(_ai_i, 2.0)
 	# integrità mura: un castello per tick
@@ -662,9 +696,15 @@ func _find_enemy(u: U, radius: float, melee: bool) -> U:
 	return best
 
 
+## Il moltiplicatore del carattere di una casata; 1 se la partita è a casate uguali.
+func _stat(team: int, stat: int) -> float:
+	return 1.0 if equal_houses else Defs.stat_mult(team, stat)
+
+
 func _hurt(u: U, dmg: float, src := SRC_POWER) -> void:
 	if u.shield:
 		dmg *= 0.3
+	dmg /= _stat(u.team, Defs.STAT_FORZA)
 	var was := u.hp
 	u.hp -= dmg
 	if was > 0.0 and u.hp <= 0.0:
@@ -787,7 +827,7 @@ func _tick_unit(u: U, dt: float) -> void:
 				u.attacking = true
 				if u.cd <= 0.0:
 					u.cd = float(d.cd) * (0.7 if u.drunk > 0.0 else 1.0)
-					var dmg: float = float(d.dmg) * (1.5 if u.drunk > 0.0 else 1.0) * (Defs.BARD_FACTOR if u.sung else 1.0)
+					var dmg: float = float(d.dmg) * (1.5 if u.drunk > 0.0 else 1.0) * (Defs.BARD_FACTOR if u.sung else 1.0) * _stat(u.team, Defs.STAT_FORZA)
 					_hurt(u.tgt, dmg, u.type)
 				_settle(u, dt)
 				return
@@ -832,7 +872,7 @@ func _tick_unit(u: U, dt: float) -> void:
 				u.attacking = true
 				if u.cd <= 0.0:
 					u.cd = float(d.cd) * (0.7 if u.drunk > 0.0 else 1.0)
-					var kdmg: float = float(d.dmg) * (1.5 if u.drunk > 0.0 else 1.0) * (Defs.BARD_FACTOR if u.sung else 1.0)
+					var kdmg: float = float(d.dmg) * (1.5 if u.drunk > 0.0 else 1.0) * (Defs.BARD_FACTOR if u.sung else 1.0) * _stat(u.team, Defs.STAT_FORZA)
 					if ranged:
 						_arrow(u.pos + Vector3(0, 1.4, 0), kp + Vector3(0, 1.0, 0))
 					_hurt_king(kc, kdmg, u.team)
@@ -911,7 +951,7 @@ func _retarget(u: U, aggro: float) -> void:
 		var had := u.tgt
 		u.tgt = _find_enemy(u, aggro, float(d.range) < 10.0)
 		if had == null and u.tgt != null and u.team != Defs.NEUTRAL and rng.randf() < 0.035:
-			_say(u, Defs.SAY_NONNA if u.type == Defs.NONNA else Defs.SAY_CARICA)
+			_say_charge(u)
 
 
 func _pick_castle_voxel(c: Dictionary, from: Vector3) -> Vector3:
@@ -936,17 +976,17 @@ func _ranged_attack(u: U, aim: Vector3, d: Dictionary) -> void:
 		var from := u.pos + Vector3(0, 1.6, 0)
 		_arrow(from, aim)
 		if u.tgt != null:
-			_hurt(u.tgt, float(d.dmg) * (1.5 if u.drunk > 0.0 else 1.0) * (Defs.BARD_FACTOR if u.sung else 1.0), u.type)
+			_hurt(u.tgt, float(d.dmg) * (1.5 if u.drunk > 0.0 else 1.0) * (Defs.BARD_FACTOR if u.sung else 1.0) * _stat(u.team, Defs.STAT_FORZA), u.type)
 	elif u.type == Defs.CATAPULTA:
 		var spread := Vector3(rng.randf_range(-1.2, 1.2), rng.randf_range(-0.6, 0.6), rng.randf_range(-1.2, 1.2))
-		_fire_arc(u.pos + Vector3(0, 3.6, 0), aim + spread, Defs.SHOT_STONE, u.team, float(d.dmg), u.type)
+		_fire_arc(u.pos + Vector3(0, 3.6, 0), aim + spread, Defs.SHOT_STONE, u.team, float(d.dmg) * _stat(u.team, Defs.STAT_FORZA), u.type)
 		game.fx_all("whoosh", u.pos, 1.0)
 	elif u.type == Defs.BOMBARDA:
 		var from := u.pos + Vector3(0, 1.4, 0)
 		var dist := from.distance_to(aim)
 		var t := maxf(dist / 70.0, 0.25)
 		var vel := (aim - from) / t + Vector3(0, 0.5 * GRAVITY * t, 0)
-		_spawn_projectile(from, vel, Defs.SHOT_BALL, u.team, float(d.dmg), u.type)
+		_spawn_projectile(from, vel, Defs.SHOT_BALL, u.team, float(d.dmg) * _stat(u.team, Defs.STAT_FORZA), u.type)
 		game.fx_all("cannon", from, 1.0)
 
 
@@ -1151,7 +1191,7 @@ func _move_to(u: U, dest: Vector3, dt: float, d: Dictionary, can_chop: bool) -> 
 	if dir.length() < 0.01:
 		return
 	dir = dir.normalized()
-	var speed: float = float(d.speed) * (1.6 if u.drunk > 0.0 else 1.0)
+	var speed: float = float(d.speed) * (1.6 if u.drunk > 0.0 else 1.0) * _stat(u.team, Defs.STAT_VELOCITA)
 	if u.water:
 		speed *= 0.85
 	if u.drunk > 0.0:
@@ -1797,7 +1837,7 @@ func _tick_slow(dt: float) -> void:
 	for c: Dictionary in castles:
 		var o: int = c.owner
 		counts[o] = int(counts.get(o, 0)) + 1
-	for t in 8:
+	for t in Defs.HOUSE_COUNT:
 		var h: Dictionary = houses[t]
 		var n: int = counts.get(t, 0)
 		var was: bool = h.alive
@@ -1805,7 +1845,7 @@ func _tick_slow(dt: float) -> void:
 		if was and not h.alive:
 			game.msg_all("%s è caduta!" % _hname(t), Defs.HOUSES[t].color)
 		var ai_f := ai_income if h.ai else 1.0
-		h.gold += Defs.income(n) * dt * ai_f
+		h.gold += Defs.income(n) * dt * ai_f * _stat(t, Defs.STAT_SOLDI)
 		h.faith = minf(float(h.faith) + float(faith_rate[t]) * dt, Defs.FAITH_CAP)
 		h.faith_rate = faith_rate[t]
 		h.sleep_msg_t = float(h.sleep_msg_t) - dt
@@ -1943,7 +1983,11 @@ func _hurt_king(c: Dictionary, dmg: float, team: int) -> void:
 
 func _king_dies(c: Dictionary, team: int) -> void:
 	var was: int = c.owner
-	game.fx_all("king_dead", c.king, float(was + 16 * team))
+	var variant := rng.randi() % Defs.KING_DEATHS.size()
+	if variant == _last_king_death:  # mai due volte di fila la stessa uscita di scena
+		variant = (variant + 1) % Defs.KING_DEATHS.size()
+	_last_king_death = variant
+	game.fx_all("king_dead", c.king, float(was + 16 * team + 256 * variant))
 	var line := _king_line("KING_DEAD", c, team)
 	_capture(c, team)
 	game.msg_all(line, Defs.HOUSES[team].color)
@@ -2274,7 +2318,7 @@ func _ai_target(t: int, from: Vector3) -> Dictionary:
 		if c.owner != Defs.NEUTRAL and int(owned[c.owner]) >= AI_LEADER_CASTLES:
 			d *= AI_LEADER_FACTOR
 		if c.owner != Defs.NEUTRAL:
-			d *= _quiet_factor(c)
+			d *= _quiet_factor(c) * _isolation_factor(c)
 		if d < bd:
 			bd = d
 			best = c
@@ -2284,6 +2328,20 @@ func _ai_target(t: int, from: Vector3) -> Dictionary:
 func _quiet_factor(c: Dictionary) -> float:
 	var q := clampf((float(c.get("quiet_t", 0.0)) - QUIET_START) / (QUIET_FULL - QUIET_START), 0.0, 1.0)
 	return lerpf(1.0, QUIET_MIN, q)
+
+
+## Quanto la distanza del castello va ridotta perché è isolato: 1 se ha un vicino a portata.
+## Dipende solo dalla mappa, quindi è uguale su ogni client e non va salvato.
+func _isolation_factor(c: Dictionary) -> float:
+	if _isolation.has(c.id):
+		return _isolation[c.id]
+	var nearest := 1e9
+	for o: Dictionary in castles:
+		if o.id != c.id:
+			nearest = minf(nearest, (c.center as Vector3).distance_to(o.center))
+	var f := clampf(pow(ISOLATION_REF / nearest, 1.5), ISOLATION_MIN, 1.0)
+	_isolation[c.id] = f
+	return f
 
 
 func _ai_power(t: int, p: Vector3, defending: bool) -> void:
@@ -2661,6 +2719,8 @@ func _faith_rates(dt: float) -> Array:
 	for t in houses.size():
 		if float(houses[t].get("excom_until", 0.0)) > time:
 			rate[t] = 0.0
+		else:
+			rate[t] = float(rate[t]) * _stat(t, Defs.STAT_FEDE)
 	return rate
 
 
@@ -2747,7 +2807,7 @@ func save_state() -> Dictionary:
 			e[k] = u.get(k)
 		us.append(e)
 	return {"time": time, "winner": winner, "truce_until": truce_until, "event_t": event_t, "procession_until": procession_until, "palio_pos": palio_pos, "palio_until": palio_until, "next_uid": next_uid, "next_bid": next_bid,
-		"ai_aggression": ai_aggression, "ai_income": ai_income, "ai_cap_mult": ai_cap_mult,
+		"ai_aggression": ai_aggression, "ai_income": ai_income, "ai_cap_mult": ai_cap_mult, "equal_houses": equal_houses,
 		"houses": houses.duplicate(true), "castles": cs, "units": us, "buildings": buildings.duplicate(true)}
 
 
@@ -2765,6 +2825,7 @@ func load_state(d: Dictionary) -> void:
 	ai_aggression = d.ai_aggression
 	ai_income = d.ai_income
 	ai_cap_mult = d.ai_cap_mult
+	equal_houses = bool(d.get("equal_houses", false))
 	houses = (d.houses as Array).duplicate(true)
 	for i in castles.size():
 		var e: Dictionary = d.castles[i]
@@ -2800,6 +2861,34 @@ func _say(u: U, cat: int, force := false) -> void:
 	say_cd = 0.35
 	var lines: Array = Defs.SAY[cat]
 	game.fx_all("say", u.pos, float(u.id * 1000 + cat * 50 + rng.randi() % lines.size()))
+
+
+## Chi carica: se dall'altra parte, o alle sue spalle, c'è una persona vera, la chiama per nome.
+func _say_charge(u: U) -> void:
+	if u.type == Defs.NONNA:
+		_say(u, Defs.SAY_NONNA)
+		return
+	var enemy := -1
+	if u.goal >= 0 and u.goal < castles.size():
+		enemy = int(castles[u.goal].owner)
+	elif u.tgt != null:
+		enemy = u.tgt.team
+	var roll := rng.randf()
+	if enemy >= 0 and enemy < Defs.HOUSE_COUNT and not bool(houses[enemy].ai) and roll < 0.5:
+		_say_named(u, Defs.SAY_CONTRO, enemy)
+	elif not bool(houses[u.team].ai) and roll < 0.35:
+		_say_named(u, Defs.SAY_PER_CAPO, u.team)
+	else:
+		_say(u, Defs.SAY_CARICA)
+
+
+## Fumetto che nomina il giocatore «who»: il nome lo mette ogni client al momento di mostrarlo.
+func _say_named(u: U, cat: int, who: int) -> void:
+	if say_cd > 0.0:
+		return
+	say_cd = 0.35
+	var lines: Array = Defs.SAY[cat]
+	game.fx_all("say_name", u.pos, float(u.id * 100000 + who * 1000 + cat * 50 + rng.randi() % lines.size()))
 
 
 func cmd_taunt(team: int, k: int) -> void:
@@ -2855,7 +2944,7 @@ func _leader() -> int:
 	var troops := {}
 	for u: U in ulist:
 		troops[u.team] = int(troops.get(u.team, 0)) + 1
-	for t in 8:
+	for t in Defs.HOUSE_COUNT:
 		if t == Defs.NEUTRAL or not houses[t].alive:
 			continue
 		var sc: int = int(counts.get(t, 0)) * 1000 + int(troops.get(t, 0))
@@ -2871,6 +2960,7 @@ func _field(u: U) -> bool:
 
 func _run_event(e: int) -> bool:
 	var ev: Array = Defs.EVENTS[e]
+	_cur_event = e
 	match e:
 		0:  # sagra: dove c'è più gente in campo, tutti (di ogni casata) vanno a mangiare
 			var field: Array = []
@@ -2905,7 +2995,7 @@ func _run_event(e: int) -> bool:
 						said += 1
 						_say(o, Defs.SAY_SAGRA, true)
 			game.fx_all("porchetta", spot, 22.0)
-			_banner(ev[0], ev[1], spot)
+			_banner(ev[0], ev[1], spot, 20.0)
 		1:  # sciopero: il tipo più numeroso della casata in testa si siede
 			var lead := _leader()
 			if lead < 0:
@@ -2935,7 +3025,7 @@ func _run_event(e: int) -> bool:
 						said += 1
 						_say(u, Defs.SAY_SCIOPERO, true)
 			var plural: String = {Defs.FANTE: "fanti", Defs.BALESTRIERE: "balestrieri", Defs.CAVALIERE: "cavalieri", Defs.NONNA: "nonne", Defs.MENESTRELLO: "menestrelli"}.get(ty, "soldati")
-			_banner(ev[0], String(ev[1]).format({"u": plural, "c": _hname(lead)}), where)
+			_banner(ev[0], String(ev[1]).format({"u": plural, "c": _hname(lead)}), where, 20.0)
 		2:  # la mamma chiama: metà dell'armata in campo della casata in testa torna al castello
 			var lead := _leader()
 			if lead < 0:
@@ -2960,10 +3050,10 @@ func _run_event(e: int) -> bool:
 				if said < 3 and rng.randf() < 0.3:
 					said += 1
 					_say(u, Defs.SAY_MAMMA, true)
-			_banner(ev[0], String(ev[1]).format({"c": _hname(lead)}), (mine[0] as U).pos)
+			_banner(ev[0], String(ev[1]).format({"c": _hname(lead)}), (mine[0] as U).pos, 15.0)
 		3:  # processione: niente poteri per nessuno
 			procession_until = time + 25.0
-			_banner(ev[0], ev[1], Vector3.ZERO)
+			_banner(ev[0], ev[1], castles[7].center, 25.0)  # la processione sfila da Roma
 		4:  # palio: i cavalieri in campo di almeno due casate corrono al traguardo
 			var riders: Array = []
 			var teams := {}
@@ -3000,14 +3090,44 @@ func _run_event(e: int) -> bool:
 					said += 1
 					_say(u, Defs.SAY_PALIO, true)
 			game.fx_all("palio", fin, 45.0)
-			_banner(ev[0], ev[1], fin)
+			_banner(ev[0], ev[1], fin, 45.0)
 		5:  # scomunica: la casata in testa resta senza Fede per un po'
 			var lead := _leader()
 			if lead < 0:
 				return false
 			houses[lead].excom_until = time + 40.0
-			_banner(ev[0], String(ev[1]).format({"c": _hname(lead)}), Vector3.ZERO)
+			var seat := Vector3.ZERO
+			for c: Dictionary in castles:
+				if int(c.owner) == lead:
+					seat = c.center
+					break
+			_banner(ev[0], String(ev[1]).format({"c": _hname(lead)}), seat, 40.0)
 	return true
+
+
+## Pannello debug: fa partire un evento adesso. Se in campo mancano i soldati che servono,
+## li schiera fuori dal primo castello di chi gioca e riprova.
+func debug_event(e: int, house: int) -> bool:
+	if _run_event(e):
+		return true
+	var c: Dictionary = {}
+	for k: Dictionary in castles:
+		if int(k.owner) == house:
+			c = k
+			break
+	if c.is_empty():
+		c = castles[0]
+	var base: Vector3 = (c.gate_out as Vector3) + (c.dir as Vector3) * 34.0
+	var teams := [house, _leader(), (house + 1) % Defs.HOUSE_COUNT]
+	for i in teams.size():
+		if int(teams[i]) < 0:
+			continue
+		for k in 8:
+			var ty := Defs.CAVALIERE if k < 3 else Defs.FANTE
+			var p := base + Vector3(float(i) * 8.0 - 8.0 + float(k % 4) * 1.6, 0.0, float(k / 4) * 1.6)
+			p.y = world.top_y(int(p.x), int(p.z))
+			spawn_unit(ty, int(teams[i]), p)
+	return _run_event(e)
 
 
 func _palio_win(u: U) -> void:
@@ -3034,8 +3154,16 @@ func _nearest_own_castle(u: U) -> Dictionary:
 	return best
 
 
-func _banner(title: String, sub: String, p: Vector3) -> void:
-	game.banner_all(title, sub, p)
+## life: per quanti secondi resta l'icona che porta sull'evento; 0 = chiude quella già aperta in p.
+func _banner(title: String, sub: String, p: Vector3, life := 0.0) -> void:
+	var picks := PackedInt32Array()
+	if life > 0.0:
+		news_t = NEWS_TIME
+		while picks.size() < NEWS_ITEMS:
+			var k := rng.randi() % News.HEADLINES.size()
+			if not picks.has(k):
+				picks.append(k)
+	game.banner_all(title, sub, p, life, _cur_event, picks)
 
 
 ## In tregua un potere non può cadere vicino ai castelli o ai soldati di un'altra casata.

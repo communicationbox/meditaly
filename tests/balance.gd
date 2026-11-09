@@ -98,7 +98,7 @@ func _run() -> void:
 			if sim.time >= next_mark:
 				next_mark += 300.0
 				timeline.append(_counts(sim))
-			for t in 8:
+			for t in Defs.HOUSE_COUNT:
 				if not sim.houses[t].alive and not elim.has(t):
 					elim[t] = int(sim.time)
 		var row := {"seed": seed0 + n, "repair": repair, "winner": sim.winner, "time": int(sim.time), "final": _counts(sim),
@@ -111,7 +111,7 @@ func _run() -> void:
 
 
 func _counts(sim: Sim) -> Array:
-	var c: Array = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+	var c: Array = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 	for k: Dictionary in sim.castles:
 		c[int(k.owner)] += 1
 	return c

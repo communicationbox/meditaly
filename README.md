@@ -86,3 +86,7 @@ tests/net_test.sh                                     # server + 2 client: mondi
 "$GODOT" --path . -s tests/menu_panels.gd -- CARTELLA     # caricamento, menu, impostazioni, pausa
 "$GODOT" --headless --path . -s tests/castle_map.gd -- Roma 313,397   # mappa percorribile di un castello, X = punti
 ```
+
+## Debug
+
+In una partita lanciata dall'editor o da una versione di debug, il tasto `-` apre il pannello per far partire gli eventi e le uscite di scena del re. Nelle versioni finite non si apre.

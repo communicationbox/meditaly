@@ -18,7 +18,8 @@ func _ready() -> void:
 	Settings.load_all()
 	# tooltip nello stile del gioco (prima erano i riquadri grigi di sistema)
 	var th := Theme.new()
-	th.set_stylebox("panel", "TooltipPanel", UiStyle.panel_box(Color(0.10, 0.07, 0.045, 0.97), UiStyle.GOLD_DIM, 10))
+	th.default_font = UiStyle.body_font()  # anche i controlli che non scelgono un font restano medievali
+	th.set_stylebox("panel", "TooltipPanel", UiStyle.panel_box(UiStyle.WALNUT, UiStyle.GOLD_DIM, 10))
 	th.set_color("font_color", "TooltipLabel", UiStyle.INK)
 	th.set_font("font", "TooltipLabel", UiStyle.body_font())
 	th.set_font_size("font_size", "TooltipLabel", 14)

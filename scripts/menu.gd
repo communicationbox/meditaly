@@ -15,6 +15,8 @@ var house := 1
 var house_title: Label
 var house_sub: Label
 var shield_btns: Array[Control] = []
+var stat_bars: Array = []
+var _logo: TextureRect
 var friends_box: Control
 var _loading: Control
 var _loading_lbl: Label
@@ -197,6 +199,7 @@ func _build_scrim() -> void:
 	scrim.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(scrim)
+	scrim.visible = false  # ora la colonna è un cartello di legno
 	scrim.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
 	scrim.offset_right = LEFT_W + 380.0
 	# vignettatura in basso, per la riga dei crediti e la profondità
@@ -224,79 +227,115 @@ func _build_panel() -> void:
 	m.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
 	m.offset_right = LEFT_W
 	for side: String in ["margin_left", "margin_right"]:
-		m.add_theme_constant_override(side, 72)
-	m.add_theme_constant_override("margin_top", 64)
-	m.add_theme_constant_override("margin_bottom", 48)
+		m.add_theme_constant_override(side, 34)
+	m.add_theme_constant_override("margin_top", 20)
+	m.add_theme_constant_override("margin_bottom", 20)
 	add_child(m)
+	var sign_board := UiStyle.panel(18)
+	sign_board.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	m.add_child(sign_board)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 0)
-	m.add_child(v)
-	v.add_child(_caps("ANNO DOMINI 1350", 13, UiStyle.GOLD_DIM, 6))
-	v.add_child(_gap(6))
-	var title := UiStyle.label("Signori d'Italia", 66, UiStyle.GOLD, true)
-	title.add_theme_constant_override("shadow_offset_y", 3)
-	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
-	v.add_child(title)
-	v.add_child(Ornament.new())
-	v.add_child(_gap(8))
-	v.add_child(UiStyle.label("Dalle Alpi alla Sicilia, un solo signore.\nE parecchi re colti alla sprovvista.", 16, UiStyle.MUTED))
-	v.add_child(_gap(34))
-	v.add_child(_caps("SCEGLI LA TUA CASATA", 12, UiStyle.MUTED, 4))
-	v.add_child(_gap(12))
+	sign_board.add_child(v)
+	_logo = TextureRect.new()
+	_logo.texture = load("res://assets/ui/logo.svg")
+	_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_logo.custom_minimum_size = Vector2(0, 128)
+	_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(_logo)
+	v.add_child(_gap(14))
+	v.add_child(UiStyle.label("Scegli la tua casata", 18, UiStyle.GOLD, true))
+	v.add_child(_gap(10))
 	var sh := HBoxContainer.new()
-	sh.add_theme_constant_override("separation", 10)
-	for i in 8:
+	sh.add_theme_constant_override("separation", 6)
+	for i in Defs.HOUSE_COUNT:
 		var s := HouseShield.new()
 		s.house = i
 		s.menu = self
-		s.custom_minimum_size = Vector2(46, 58)
+		s.custom_minimum_size = Vector2(50, 62)
 		s.tooltip_text = "%s · %s" % [Defs.HOUSES[i].name, Defs.HOUSES[i].city]
 		sh.add_child(s)
 		shield_btns.append(s)
 	v.add_child(sh)
-	v.add_child(_gap(16))
-	house_title = UiStyle.label("", 34, UiStyle.INK, true)
+	v.add_child(_gap(10))
+	house_title = UiStyle.label("", 38, UiStyle.INK, true)
+	house_title.add_theme_font_override("font", UiStyle.display_font())
+	house_title.add_theme_constant_override("outline_size", 8)
 	v.add_child(house_title)
-	house_sub = UiStyle.label("", 15, UiStyle.MUTED)
+	house_sub = UiStyle.label("", 17, UiStyle.MUTED)
 	v.add_child(house_sub)
-	v.add_child(_gap(18))
+	v.add_child(_gap(10))
+	for k in Defs.STAT_NAMES.size():
+		var row_s := HBoxContainer.new()
+		row_s.add_theme_constant_override("separation", 10)
+		var ln := UiStyle.label(String(Defs.STAT_NAMES[k]), 18, UiStyle.INK, true)
+		ln.custom_minimum_size = Vector2(96, 0)
+		row_s.add_child(ln)
+		var bar := StatBar.new()
+		bar.fill = StatBar.COLORS[k]
+		bar.custom_minimum_size = Vector2(5 * StatBar.CUBE + 4 * StatBar.GAP, StatBar.CUBE)
+		row_s.add_child(bar)
+		v.add_child(row_s)
+		v.add_child(_gap(4))
+		stat_bars.append(bar)
+	var eq := CheckBox.new()
+	eq.text = "Casate uguali: stessi valori per tutti"
+	eq.focus_mode = Control.FOCUS_NONE
+	eq.add_theme_font_override("font", UiStyle.body_font())
+	eq.add_theme_font_size_override("font_size", 16)
+	eq.add_theme_color_override("font_color", UiStyle.INK)
+	eq.add_theme_color_override("font_hover_color", UiStyle.GOLD)
+	eq.add_theme_color_override("font_pressed_color", UiStyle.INK)
+	eq.add_theme_icon_override("unchecked", _tick_icon(false))
+	eq.add_theme_icon_override("checked", _tick_icon(true))
+	eq.tooltip_text = "Spegne i caratteri delle casate: tutte con 3 cubetti per voce"
+	eq.button_pressed = Settings.equal_houses
+	eq.toggled.connect(func(on: bool) -> void:
+		Settings.equal_houses = on
+		Settings.save_all()
+		_show_stats())
+	v.add_child(eq)
+	v.add_child(_gap(10))
 	name_edit = LineEdit.new()
-	name_edit.placeholder_text = "Il tuo nome (facoltativo)"
+	name_edit.placeholder_text = "Scrivi il tuo nome"
+	name_edit.text = Settings.player_name
 	name_edit.max_length = 20
 	name_edit.custom_minimum_size = Vector2(0, 40)
 	_style_edit(name_edit)
 	v.add_child(name_edit)
-	v.add_child(_gap(26))
+	v.add_child(_gap(14))
 	var solo := _primary("Gioca contro l'IA", "Partita libera contro le altre casate")
 	solo.pressed.connect(func(): _go(func(): play_solo.emit(house, name_edit.text)))
 	v.add_child(solo)
 	v.add_child(_gap(10))
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	var tut := _secondary("Tutorial guidato", "Prima volta? Ti guida passo passo")
-	tut.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tut.pressed.connect(func(): _go(func(): tutorial.emit(house, name_edit.text)))
-	row.add_child(tut)
+	# sotto il pulsante principale, tutte le altre voci con lo stesso peso
+	var more := GridContainer.new()
+	more.columns = 2
+	more.add_theme_constant_override("h_separation", 10)
+	more.add_theme_constant_override("v_separation", 10)
 	var sv := SaveGame.summary()
 	if not sv.is_empty():
 		var cont := _secondary("Continua", "%s, %d minuti di gioco · %s" % [Defs.HOUSES[int(sv.house)].name, int(sv.minutes), sv.date])
-		cont.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		cont.pressed.connect(func(): _go(func(): continue_game.emit()))
-		row.add_child(cont)
-	v.add_child(row)
-	v.add_child(_gap(18))
-	var links := HBoxContainer.new()
-	links.add_theme_constant_override("separation", 26)
-	var fr := _link("Gioca con gli amici", "Ospita una partita o entra in quella di un amico")
-	fr.pressed.connect(func(): friends_box.visible = not friends_box.visible)
-	links.add_child(fr)
-	var st := _link("Impostazioni", "Audio, schermo e difficoltà")
+		cont.pressed.connect(func(): _go(func(): continue_game.emit(), false))
+		more.add_child(cont)
+	var tut := _secondary("Tutorial guidato", "Prima volta? Ti guida passo passo")
+	tut.pressed.connect(func(): _go(func(): tutorial.emit(house, name_edit.text)))
+	more.add_child(tut)
+	var fr := _secondary("Gioca con gli amici", "Ospita una partita o entra in quella di un amico")
+	fr.pressed.connect(func():
+		friends_box.visible = not friends_box.visible
+		_logo.visible = not friends_box.visible)  # il cartello resta tutto dentro lo schermo
+	more.add_child(fr)
+	var st := _secondary("Impostazioni", "Audio, schermo e difficoltà")
 	st.pressed.connect(_open_settings)
-	links.add_child(st)
-	var ex := _link("Esci", "")
+	more.add_child(st)
+	var ex := _secondary("Esci", "Chiude il gioco")
 	ex.pressed.connect(func(): get_tree().quit())
-	links.add_child(ex)
-	v.add_child(links)
+	more.add_child(ex)
+	for k: Node in more.get_children():
+		(k as Control).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_child(more)
 	v.add_child(_gap(12))
 	friends_box = _friends()
 	friends_box.visible = false
@@ -304,7 +343,6 @@ func _build_panel() -> void:
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	v.add_child(spacer)
-	v.add_child(UiStyle.label("Clicca uno stemma: si vola sul suo castello.", 12, UiStyle.OFF))
 
 
 func _friends() -> Control:
@@ -365,27 +403,24 @@ func _build_loading() -> void:
 	col.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	col.offset_left = -260
 	col.offset_right = 260
-	col.offset_top = -370
+	col.offset_top = -470
 	col.offset_bottom = -100
 	col.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	col.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	col.alignment = BoxContainer.ALIGNMENT_END
 	col.add_theme_constant_override("separation", 10)
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var kicker := _caps("ANNO DOMINI 1350", 13, UiStyle.GOLD_DIM, 5)
-	kicker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	col.add_child(kicker)
-	var title := UiStyle.label("Signori d'Italia", 64, UiStyle.GOLD, true)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_constant_override("outline_size", 14)
-	title.add_theme_color_override("font_outline_color", Color(0.1, 0.05, 0.02))
-	col.add_child(title)
-	var orn := Ornament.new()
-	orn.centered = true
-	col.add_child(orn)
+	var load_logo := TextureRect.new()
+	load_logo.texture = load("res://assets/ui/logo.svg")
+	load_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	load_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	load_logo.custom_minimum_size = Vector2(0, 240)
+	load_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(load_logo)
 	var gap := Control.new()
 	gap.custom_minimum_size = Vector2(0, 14)
 	col.add_child(gap)
-	_loading_lbl = _caps(LOAD_STAGES[0].to_upper(), 13, UiStyle.INK, 4)
+	_loading_lbl = _caps(LOAD_STAGES[0].to_upper(), 19, UiStyle.INK, 3)
 	_loading_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(_loading_lbl)
 	# barra: fondo scuro con bordo oro, riempimento oro
@@ -405,7 +440,7 @@ func _build_loading() -> void:
 	_load_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_load_bar_bg.add_child(_load_bar)
 	col.add_child(_load_bar_bg)
-	_load_pct = UiStyle.label("0%", 13, UiStyle.MUTED)
+	_load_pct = UiStyle.label("0%", 18, UiStyle.MUTED)
 	_load_pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(_load_pct)
 	_loading.add_child(col)
@@ -463,9 +498,19 @@ func _reveal() -> void:
 
 
 ## Prima di cominciare: il mondo del menu deve essere pronto per passare alla partita.
-func _go(start: Callable) -> void:
+func _go(start: Callable, need_name := true) -> void:
 	if _starting:
 		return  # doppio clic
+	if need_name:
+		var nm := name_edit.text.strip_edges()
+		if nm == "":
+			name_edit.grab_focus()
+			name_edit.placeholder_text = "Scrivi prima il tuo nome!"
+			name_edit.add_theme_color_override("font_placeholder_color", Color(0.72, 0.14, 0.12))
+			return
+		name_edit.text = nm
+		Settings.player_name = nm
+		Settings.save_all()
 	_starting = true
 	_show_starting()
 	# prima si lascia disegnare la rotella, poi si prepara il mondo a piccole dosi
@@ -510,8 +555,24 @@ func select_house(i: int) -> void:
 	var h: Dictionary = Defs.HOUSES[i]
 	house_title.text = String(h.name)
 	house_sub.text = "%s · %s" % [h.city, h.motto]
+	_show_stats()
 	for s in shield_btns:
 		s.queue_redraw()
+
+
+## Casella disegnata in oro: quella del tema, scura su scuro, non si vedeva.
+func _tick_icon(on: bool) -> ImageTexture:
+	var img := Image.create(18, 18, false, Image.FORMAT_RGBA8)
+	img.fill(UiStyle.OUTLINE)
+	img.fill_rect(Rect2i(2, 2, 14, 14), Color(0.96, 0.89, 0.72))
+	if on:
+		img.fill_rect(Rect2i(5, 5, 8, 8), Color(0.72, 0.14, 0.12))
+	return ImageTexture.create_from_image(img)
+
+
+func _show_stats() -> void:
+	for k in stat_bars.size():
+		(stat_bars[k] as StatBar).set_value(3 if Settings.equal_houses else int(Defs.HOUSES[house].stats[k]))
 
 
 func _open_settings() -> void:
@@ -531,7 +592,7 @@ func _gap(h: float) -> Control:
 ## Maiuscolette spaziate (Optima con spaziatura fra le lettere).
 func _caps(text: String, size: int, col: Color, spacing: int) -> Label:
 	var fv := FontVariation.new()
-	fv.base_font = UiStyle.title_font()
+	fv.base_font = load(UiStyle.FONT_UI)  # una variante di una variante perderebbe i caratteri di riserva
 	fv.spacing_glyph = spacing
 	var l := UiStyle.label(text, size, col, true)
 	l.add_theme_font_override("font", fv)
@@ -546,10 +607,15 @@ func _primary(text: String, tip: String) -> Button:
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	b.add_theme_font_override("font", UiStyle.title_font())
-	b.add_theme_font_size_override("font_size", 23)
-	var n := _box(Color(0.86, 0.64, 0.26), Color(1.0, 0.85, 0.5), 2)
-	var hv := _box(Color(0.95, 0.73, 0.32), Color(1.0, 0.9, 0.6), 2)
-	var pr := _box(Color(0.74, 0.54, 0.2), Color(1.0, 0.85, 0.5), 2)
+	b.add_theme_font_size_override("font_size", 27)
+	var n := _box(Color(1.0, 0.76, 0.22), UiStyle.OUTLINE, 3)
+	n.border_width_bottom = 7
+	var hv := n.duplicate() as StyleBoxFlat
+	hv.bg_color = Color(1.0, 0.86, 0.38)
+	var pr := n.duplicate() as StyleBoxFlat
+	pr.bg_color = Color(0.92, 0.66, 0.16)
+	pr.border_width_bottom = 3
+	pr.content_margin_top = 12.0
 	b.add_theme_stylebox_override("normal", n)
 	b.add_theme_stylebox_override("hover", hv)
 	b.add_theme_stylebox_override("pressed", pr)
@@ -563,35 +629,12 @@ func _secondary(text: String, tip: String) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.tooltip_text = tip
-	b.custom_minimum_size = Vector2(0, 44)
+	b.custom_minimum_size = Vector2(0, 48)
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	b.add_theme_font_override("font", UiStyle.title_font())
-	b.add_theme_font_size_override("font_size", 17)
-	b.add_theme_stylebox_override("normal", _box(Color(0.08, 0.055, 0.035, 0.55), Color(0.93, 0.72, 0.30, 0.65), 1))
-	b.add_theme_stylebox_override("hover", _box(Color(0.2, 0.14, 0.08, 0.75), UiStyle.GOLD, 1))
-	b.add_theme_stylebox_override("pressed", _box(Color(0.05, 0.03, 0.02, 0.8), UiStyle.GOLD, 1))
-	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	b.add_theme_color_override("font_color", UiStyle.INK)
-	b.add_theme_color_override("font_hover_color", UiStyle.GOLD)
-	b.add_theme_color_override("font_pressed_color", UiStyle.GOLD)
-	return b
-
-
-func _link(text: String, tip: String) -> Button:
-	var b := Button.new()
-	b.text = text
-	b.tooltip_text = tip
-	b.flat = true
-	b.focus_mode = Control.FOCUS_NONE
-	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	b.add_theme_font_override("font", UiStyle.body_font())
-	b.add_theme_font_size_override("font_size", 15)
-	b.add_theme_color_override("font_color", UiStyle.MUTED)
-	b.add_theme_color_override("font_hover_color", UiStyle.GOLD)
-	b.add_theme_color_override("font_pressed_color", UiStyle.GOLD)
-	for st: String in ["normal", "hover", "pressed", "focus"]:
-		b.add_theme_stylebox_override(st, StyleBoxEmpty.new())
+	b.add_theme_font_size_override("font_size", 19)
+	UiStyle.style_button(b)
 	return b
 
 
@@ -600,30 +643,83 @@ func _box(bg: Color, border: Color, bw: int) -> StyleBoxFlat:
 	sb.bg_color = bg
 	sb.border_color = border
 	sb.set_border_width_all(bw)
-	sb.set_corner_radius_all(2)
+	sb.set_corner_radius_all(11)
 	sb.set_content_margin_all(8)
 	return sb
 
 
 func _style_edit(e: LineEdit) -> void:
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0, 0, 0, 0.28)
-	sb.border_color = Color(0.93, 0.72, 0.30, 0.5)
-	sb.border_width_bottom = 1
-	sb.set_content_margin_all(10)
+	sb.bg_color = Color(0.96, 0.89, 0.72)
+	sb.border_color = UiStyle.OUTLINE
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(8)
+	sb.set_content_margin_all(9)
 	e.add_theme_stylebox_override("normal", sb)
 	var f := sb.duplicate() as StyleBoxFlat
-	f.border_color = UiStyle.GOLD
-	f.border_width_bottom = 2
+	f.border_color = Color(0.72, 0.16, 0.13)
+	f.set_border_width_all(3)
 	e.add_theme_stylebox_override("focus", f)
 	e.add_theme_font_override("font", UiStyle.body_font())
-	e.add_theme_font_size_override("font_size", 16)
-	e.add_theme_color_override("font_color", UiStyle.INK)
-	e.add_theme_color_override("font_placeholder_color", UiStyle.OFF)
+	e.add_theme_font_size_override("font_size", 17)
+	e.add_theme_color_override("font_color", UiStyle.OUTLINE)
+	e.add_theme_color_override("font_placeholder_color", Color(0.45, 0.32, 0.2))
 	e.add_theme_color_override("caret_color", UiStyle.GOLD)
 
 
 ## Filetto d'oro con un rombo al centro, sotto il titolo.
+## Barra a cinque cubetti del carattere di una casata.
+class StatBar:
+	extends Control
+	const CUBE := 21.0
+	const GAP := 5.0
+	const COLORS := [Color(1.0, 0.76, 0.22), Color(0.86, 0.2, 0.16), Color(0.36, 0.78, 0.32), Color(0.36, 0.62, 0.98)]
+	var value := 0
+	var fill := Color.WHITE
+
+	func set_value(v: int) -> void:
+		value = v
+		queue_redraw()
+
+	func _draw() -> void:
+		for i in 5:
+			var r := Rect2(i * (CUBE + GAP), 0.0, CUBE, CUBE)
+			draw_rect(r, fill if i < value else Color(0.38, 0.23, 0.11))
+			if i < value:  # luce in alto: il cubetto ha volume, come quelli del mondo
+				draw_rect(Rect2(r.position + Vector2(3, 3), Vector2(CUBE - 6, 4)), fill.lightened(0.45))
+			draw_rect(r, UiStyle.OUTLINE, false, 2.5)
+
+
+## Stendardo rosso a coda di rondine con il nome del gioco: il primo segno che si vede.
+class TitleBanner:
+	extends Control
+	const TITLE := "Signori d'Italia"
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(0, 98)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var w := size.x
+		var h := size.y
+		var t := 6.0
+		var b := h - 10.0
+		var pts := PackedVector2Array([Vector2(0, t), Vector2(w, t), Vector2(w - 26, (t + b) * 0.5), Vector2(w, b), Vector2(0, b), Vector2(26, (t + b) * 0.5)])
+		draw_colored_polygon(pts + PackedVector2Array(), Color(0.72, 0.13, 0.12))
+		draw_rect(Rect2(14, t + 3, w - 28, 7), Color(0.88, 0.27, 0.2))
+		var closed := pts.duplicate()
+		closed.append(pts[0])
+		draw_polyline(closed, UiStyle.OUTLINE, 4.0, true)
+		var f: Font = UiStyle.display_font()
+		var fs := 58
+		while fs > 30 and f.get_string_size(TITLE, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > w - 70.0:
+			fs -= 1
+		var sz := f.get_string_size(TITLE, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+		var pos := Vector2((w - sz.x) * 0.5, (t + b) * 0.5 + f.get_ascent(fs) * 0.36)
+		draw_string_outline(f, pos + Vector2(0, 2), TITLE, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 11, UiStyle.OUTLINE)
+		draw_string(f, pos, TITLE, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, UiStyle.GOLD)
+
+
 class Ornament:
 	extends Control
 	var centered := false  # nel caricamento sta al centro; nel pannello del menu segue il titolo a sinistra
@@ -692,7 +788,7 @@ class HouseShield:
 
 	func _draw() -> void:
 		var chosen: bool = menu.house == house
-		var lift := -4.0 if (chosen or hover) else 0.0
+		var lift := -6.0 if chosen else (-3.0 if hover else 0.0)
 		var w := size.x
 		var h := size.y
 		var o := Vector2(0, lift)
@@ -704,15 +800,15 @@ class HouseShield:
 				for p in pts:
 					g.append(p + (p - (o + Vector2(w * 0.5, h * 0.45))).normalized() * (3.0 + k * 3.0))
 				draw_colored_polygon(g, Color(1.0, 0.8, 0.35, 0.16 - k * 0.04))
-		draw_colored_polygon(pts, col.darkened(0.0 if (chosen or hover) else 0.35))
+		draw_colored_polygon(pts, col.darkened(0.0 if (chosen or hover) else 0.12))
 		# riflesso in alto a sinistra e ombra in basso: lo stemma ha volume
 		draw_colored_polygon(PackedVector2Array([o + Vector2(3, 3), o + Vector2(w * 0.5, 3), o + Vector2(w * 0.5, h * 0.5), o + Vector2(3, h * 0.5)]), Color(1, 1, 1, 0.12))
 		var closed := pts.duplicate()
 		closed.append(pts[0])
-		draw_polyline(closed, UiStyle.GOLD if chosen else Color(0.93, 0.72, 0.30, 0.45), 2.0 if chosen else 1.2, true)
+		draw_polyline(closed, UiStyle.GOLD if chosen else UiStyle.OUTLINE, 4.0 if chosen else 3.0, true)
 		var letter := String(Defs.HOUSES[house].name).substr(0, 1)
-		var f: Font = UiStyle.title_font()
-		var fs := 22
+		var f: Font = UiStyle.display_font()
+		var fs := 27
 		var tw := f.get_string_size(letter, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 		var ink := Color(0.12, 0.08, 0.05, 0.85) if col.get_luminance() > 0.55 else Color(1, 0.95, 0.85, 0.92)
 		draw_string(f, o + Vector2((w - tw) * 0.5, h * 0.5), letter, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, ink)

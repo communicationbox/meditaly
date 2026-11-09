@@ -25,10 +25,10 @@ func _run() -> void:
 	var w: VoxelWorld = g.world
 	# codifica: l'ultimo voxel del mondo deve sopravvivere al giro nell'int64 (e al passaggio in rete)
 	var last := Defs.WX * Defs.WZ * Defs.WY - 1
-	var enc := PackedInt64Array([(last << Defs.EDIT_SHIFT) | (Defs.TEAM0 + 8)])
+	var enc := PackedInt64Array([(last << Defs.EDIT_SHIFT) | (Defs.TEAM0 + Defs.NEUTRAL)])
 	enc = enc.to_byte_array().compress(FileAccess.COMPRESSION_ZSTD).decompress(enc.size() * 8, FileAccess.COMPRESSION_ZSTD).to_int64_array()
 	check("codifica: indice massimo", (enc[0] >> Defs.EDIT_SHIFT) == last)
-	check("codifica: materiale massimo", (enc[0] & Defs.EDIT_MASK) == Defs.TEAM0 + 8)
+	check("codifica: materiale massimo", (enc[0] & Defs.EDIT_MASK) == Defs.TEAM0 + Defs.NEUTRAL)
 	check("codifica: valore positivo", enc[0] > 0)
 	# crateri ripetuti non arrivano mai al livello del mare
 	var c: Dictionary = g.castles[0]
@@ -270,12 +270,24 @@ func _run() -> void:
 	sim.cmd_power(1, Defs.P_PARMIGIANO, aim)
 	check("col caseificio il Parmigiano parte", float(h1.cd[Defs.P_PARMIGIANO]) > 0.0)
 	sim.wheels.clear()
+	# lancio a mano: parte da dove si è premuto, verso il vettore, e la lunghezza è la potenza
+	h1.cd[Defs.P_PARMIGIANO] = 0.0
+	h1.faith = 200.0
+	sim.cmd_power(1, Defs.P_PARMIGIANO, aim, Vector3(Sim.WHEEL_AIM_MAX, 0, 0))
+	check("il vettore decide la direzione", sim.wheels.size() == 1 and float((sim.wheels[0].vel as Vector3).x) > 0.0 and absf(float((sim.wheels[0].vel as Vector3).z)) < 0.01)
+	check("vettore lungo, forma veloce", sim.wheels.size() == 1 and is_equal_approx((sim.wheels[0].vel as Vector3).length(), Sim.WHEEL_SPEED_MAX))
+	sim.wheels.clear()
+	h1.cd[Defs.P_PARMIGIANO] = 0.0
+	h1.faith = 200.0
+	sim.cmd_power(1, Defs.P_PARMIGIANO, aim, Vector3(0, 0, Sim.WHEEL_AIM_MIN))
+	check("vettore corto, forma lenta", sim.wheels.size() == 1 and is_equal_approx((sim.wheels[0].vel as Vector3).length(), Sim.WHEEL_SPEED_MIN))
+	sim.wheels.clear()
 	# più chiese, più Fede
 	for k in 2:
 		var cs_p := sim.find_spot(1, mi)
 		sim.build_now(1, Defs.B_CHIESA, cs_p)
 	rates = sim._faith_rates(0.0)
-	check("due chiese, Fede doppia (%.2f/s)" % float(rates[1]), is_equal_approx(float(rates[1]), 2.0 * Defs.FAITH_CHURCH))
+	check("due chiese, Fede doppia (%.2f/s)" % float(rates[1]), is_equal_approx(float(rates[1]), 2.0 * Defs.FAITH_CHURCH * sim._stat(1, Defs.STAT_FEDE)))
 	var q1: int = (mi.queue as Array).size()
 	sim.cmd_recruit(1, mi.id, Defs.FRATE)
 	check("con una chiesa si reclutano frati", (mi.queue as Array).size() == q1 + 1)
@@ -505,6 +517,36 @@ func _run() -> void:
 	sim._tick_wheels(1.0 / Defs.SIM_HZ)
 	check("davanti alla forma si scappa", victim.flee > 0.0)
 	sim.wheels.clear()
+	# chi sta su un'isola non è al sicuro per geografia: pesa di più nella scelta del bersaglio
+	check("Palermo conta come isolata", sim._isolation_factor(g.castles[10]) <= 0.55)
+	check("Cagliari conta come isolata", sim._isolation_factor(g.castles[11]) <= 0.55)
+	check("Napoli non è isolata", sim._isolation_factor(g.castles[8]) == 1.0)
+	check("almeno 200 titoli di giornale", News.HEADLINES.size() >= 200)
+	# debug: ogni evento parte a comando, anche a campo vuoto
+	var dbg_ok := true
+	for e in Defs.EVENTS.size():
+		for u: Sim.U in sim.ulist.duplicate():
+			u.hp = 0.0
+		sim._cleanup_dead()
+		dbg_ok = dbg_ok and sim.debug_event(e, 4)
+		sim.palio_until = 0.0
+		sim.news_t = 0.0
+	check("debug: tutti gli eventi partono a comando", dbg_ok)
+	for u: Sim.U in sim.ulist.duplicate():
+		u.hp = 0.0
+	sim._cleanup_dead()
+	# caratteri delle casate: stesso totale per tutte, e con «casate uguali» non contano
+	var same_total := true
+	for k in Defs.HOUSE_COUNT:
+		var tot := 0
+		for v: int in Defs.HOUSES[k].stats:
+			tot += v
+		same_total = same_total and tot == Defs.STAT_TOTAL
+	check("stesso totale di cubetti per ogni casata", same_total)
+	check("la Serenissima guadagna di più del Papato", sim._stat(2, Defs.STAT_SOLDI) > sim._stat(5, Defs.STAT_SOLDI))
+	sim.equal_houses = true
+	check("casate uguali: nessun bonus", sim._stat(2, Defs.STAT_SOLDI) == 1.0 and sim._stat(7, Defs.STAT_FORZA) == 1.0)
+	sim.equal_houses = false
 	# vittoria: tutti i castelli alla stessa casata
 	for cs: Dictionary in g.castles:
 		cs.owner = 1

@@ -126,6 +126,15 @@ func _build_ui() -> void:
 
 
 ## Colonna di luce sul castello da attaccare.
+	# il tutorial non passa da UiStyle.label: i font vanno messi qui
+	title_lbl.add_theme_font_override("font", UiStyle.title_font())
+	text_lbl.add_theme_font_override("font", UiStyle.body_font())
+	text_lbl.add_theme_font_size_override("font_size", 18)
+	for b: Button in [next_btn, skip_btn]:
+		b.add_theme_font_override("font", UiStyle.title_font())
+		b.add_theme_font_size_override("font_size", 17)
+
+
 func _build_beam() -> void:
 	beam = MeshInstance3D.new()
 	var cyl := CylinderMesh.new()

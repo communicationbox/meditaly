@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<path fill="#f7b72d" d="M128 19V35M59 45L71 58M22 108L41 112M31 178L49 169M197 45L185 58M234 108L215 112M225 178L207 169M128 224V237" stroke="#2b1608" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+<path fill="#f7b72d" d="M106 51H150V93H194V137H150V211H106V137H62V93H106Z" stroke="#2b1608" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+<path fill="#d77a16" d="M133 55H146V108H190V133H146V207H128V122H190V111H133Z"/>
+<path fill="#ffe58a" d="M110 55H128V99H67V115H110Z"/>
+<path fill="none" d="M106 51H150V93H194V137H150V211H106V137H62V93H106Z" stroke="#2b1608" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+<polygon fill="#e94d35" points="128,98 145,116 128,134 111,116" stroke="#2b1608" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

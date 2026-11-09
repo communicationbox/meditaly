@@ -14,6 +14,8 @@ static var volume := 0.8
 static var muted := false
 static var fullscreen := false
 static var difficulty := 1
+static var equal_houses := false
+static var player_name := ""
 static var _loaded := false
 
 
@@ -27,6 +29,8 @@ static func load_all() -> void:
 		muted = bool(cf.get_value("audio", "muto", muted))
 		fullscreen = bool(cf.get_value("schermo", "intero", fullscreen))
 		difficulty = clampi(int(cf.get_value("partita", "difficolta", difficulty)), 0, DIFFS.size() - 1)
+		equal_houses = bool(cf.get_value("partita", "casate_uguali", equal_houses))
+		player_name = String(cf.get_value("partita", "nome", player_name))
 	apply()
 
 
@@ -36,6 +40,8 @@ static func save_all() -> void:
 	cf.set_value("audio", "muto", muted)
 	cf.set_value("schermo", "intero", fullscreen)
 	cf.set_value("partita", "difficolta", difficulty)
+	cf.set_value("partita", "casate_uguali", equal_houses)
+	cf.set_value("partita", "nome", player_name)
 	cf.save(PATH)
 
 
@@ -58,7 +64,7 @@ class SettingsPanel:
 	extends Control
 	signal closed
 
-	const W := 560.0
+	const W := 680.0
 	var _diff_cards: Array[Button] = []
 
 	func _ready() -> void:
@@ -72,7 +78,7 @@ class SettingsPanel:
 				closed.emit())
 		add_child(dim)
 		var card := PanelContainer.new()
-		var sb := UiStyle.panel_box(Color(0.10, 0.07, 0.045, 0.99), UiStyle.GOLD_DIM, 0)
+		var sb := UiStyle.panel_box(UiStyle.WALNUT, UiStyle.GOLD_DIM, 0)
 		sb.content_margin_left = 34
 		sb.content_margin_right = 34
 		sb.content_margin_top = 26
@@ -105,7 +111,7 @@ class SettingsPanel:
 		v.add_child(_section("AUDIO"))
 		var vrow := HBoxContainer.new()
 		vrow.add_theme_constant_override("separation", 16)
-		var vl := UiStyle.label("Volume", 17, UiStyle.INK)
+		var vl := UiStyle.label("Volume", 20, UiStyle.INK)
 		vl.custom_minimum_size.x = 150
 		vrow.add_child(vl)
 		var vol := _slider()
@@ -143,20 +149,20 @@ class SettingsPanel:
 			_diff_cards.append(c)
 		v.add_child(dh)
 		v.add_child(_gap(8))
-		v.add_child(UiStyle.label("Vale dalla prossima partita.", 13, UiStyle.MUTED))
+		v.add_child(UiStyle.label("Vale dalla prossima partita.", 17, UiStyle.MUTED))
 		v.add_child(_gap(22))
 		# piede
 		var foot := HBoxContainer.new()
-		var hint := UiStyle.label("Le scelte si salvano da sole", 13, UiStyle.MUTED)
+		var hint := UiStyle.label("Le scelte si salvano da sole", 17, UiStyle.MUTED)
 		hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		foot.add_child(hint)
 		var done := UiStyle.button("Fatto", "Chiudi (Esc)", func(): closed.emit(), 150.0, 44.0)
-		UiStyle.style_button(done, Color(0.86, 0.64, 0.26), Color(1.0, 0.85, 0.5), Color(0.95, 0.73, 0.32))
+		UiStyle.style_button(done, Color(1.0, 0.76, 0.22), UiStyle.OUTLINE, Color(1.0, 0.86, 0.38))
 		for kk: String in ["font_color", "font_hover_color", "font_pressed_color"]:
 			done.add_theme_color_override(kk, Color(0.17, 0.09, 0.03))
 		done.add_theme_font_override("font", UiStyle.title_font())
-		done.add_theme_font_size_override("font_size", 19)
+		done.add_theme_font_size_override("font_size", 23)
 		foot.add_child(done)
 		v.add_child(foot)
 		_refresh_diff()
@@ -189,11 +195,7 @@ class SettingsPanel:
 		var box := VBoxContainer.new()
 		box.add_theme_constant_override("separation", 0)
 		box.add_child(_gap(22))
-		var fv := FontVariation.new()
-		fv.base_font = UiStyle.title_font()
-		fv.spacing_glyph = 4
-		var l := UiStyle.label(t, 13, UiStyle.GOLD_DIM, true)
-		l.add_theme_font_override("font", fv)
+		var l := UiStyle.label(t.capitalize(), 22, UiStyle.GOLD, true)
 		box.add_child(l)
 		box.add_child(_gap(10))
 		return box
@@ -257,8 +259,8 @@ class SettingsPanel:
 		var col := VBoxContainer.new()
 		col.add_theme_constant_override("separation", 0)
 		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		col.add_child(UiStyle.label(t, 17, UiStyle.INK))
-		col.add_child(UiStyle.label(sub, 13, UiStyle.MUTED))
+		col.add_child(UiStyle.label(t, 20, UiStyle.INK))
+		col.add_child(UiStyle.label(sub, 17, UiStyle.MUTED))
 		row.add_child(col)
 		var sw := Switch.new()
 		sw.button_pressed = on
@@ -274,7 +276,7 @@ class SettingsPanel:
 		b.toggle_mode = true
 		b.focus_mode = Control.FOCUS_NONE
 		b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		b.custom_minimum_size = Vector2(0, 92)
+		b.custom_minimum_size = Vector2(0, 142)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var inner := VBoxContainer.new()
 		inner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -284,9 +286,9 @@ class SettingsPanel:
 		inner.offset_bottom = -10
 		inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		inner.add_theme_constant_override("separation", 4)
-		var n := UiStyle.label(d.name, 19, UiStyle.INK, true)
+		var n := UiStyle.label(d.name, 22, UiStyle.INK, true)
 		inner.add_child(n)
-		var ds := UiStyle.label(d.desc, 12, UiStyle.MUTED)
+		var ds := UiStyle.label(d.desc, 17, UiStyle.MUTED)
 		ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		inner.add_child(ds)
 		b.add_child(inner)
@@ -302,14 +304,14 @@ class SettingsPanel:
 			var b := _diff_cards[k]
 			var sel := k == Settings.difficulty
 			b.set_pressed_no_signal(sel)
-			var bg := Color(0.24, 0.17, 0.09) if sel else Color(0.13, 0.095, 0.065)
-			var bd := UiStyle.GOLD if sel else Color(0.3, 0.24, 0.17)
+			var bg := Color(0.52, 0.31, 0.11) if sel else Color(0.17, 0.095, 0.045)
+			var bd := UiStyle.GOLD if sel else UiStyle.OUTLINE
 			for st: String in ["normal", "pressed", "hover", "hover_pressed"]:
 				var sbx := StyleBoxFlat.new()
-				sbx.bg_color = bg if st != "hover" or sel else Color(0.18, 0.13, 0.085)
+				sbx.bg_color = bg if st != "hover" or sel else Color(0.26, 0.15, 0.07)
 				sbx.border_color = bd if st != "hover" or sel else UiStyle.GOLD_DIM
-				sbx.set_border_width_all(2 if sel else 1)
-				sbx.set_corner_radius_all(4)
+				sbx.set_border_width_all(3)
+				sbx.set_corner_radius_all(9)
 				b.add_theme_stylebox_override(st, sbx)
 			b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 			(b.get_meta("name_lbl") as Label).add_theme_color_override("font_color", UiStyle.GOLD if sel else UiStyle.INK)
@@ -340,12 +342,12 @@ class Switch:
 
 	func _draw() -> void:
 		var r := Rect2(Vector2(0, (size.y - 26) / 2.0), Vector2(52, 26))
-		var off := Color(0.2, 0.16, 0.12)
+		var off := Color(0.46, 0.38, 0.30)
 		var bg := off.lerp(Color(0.78, 0.58, 0.24), _t)
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = bg
-		sb.border_color = Color(UiStyle.GOLD_DIM, 0.8) if not is_hovered() else UiStyle.GOLD
-		sb.set_border_width_all(1)
+		sb.border_color = UiStyle.OUTLINE if not is_hovered() else UiStyle.GOLD
+		sb.set_border_width_all(2)
 		sb.set_corner_radius_all(13)
 		draw_style_box(sb, r)
 		var cx := lerpf(r.position.x + 13, r.end.x - 13, _t)

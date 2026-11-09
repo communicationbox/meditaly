@@ -21,7 +21,24 @@ func _c(col: Color) -> Color:
 	return col.lerp(Color(0.32, 0.29, 0.26), 0.8) if dim else col
 
 
+## Le icone disegnate a parte, in assets/ui/icons: dove c'è il file si usa quello.
+static var _textures := {}
+
+
+static func _icon(k: String) -> Texture2D:
+	if not _textures.has(k):
+		var path := "res://assets/ui/icons/%s.svg" % k
+		_textures[k] = load(path) if ResourceLoader.exists(path) else null
+	return _textures[k]
+
+
 func _draw() -> void:
+	var tex := _icon(kind)
+	if tex != null:
+		var side := minf(size.x, size.y)
+		var tint := Color(0.5, 0.48, 0.45) if dim else Color.WHITE
+		draw_texture_rect(tex, Rect2((size - Vector2(side, side)) * 0.5, Vector2(side, side)), false, tint)
+		return
 	var s := minf(size.x, size.y)
 	var o := (size - Vector2(s, s)) * 0.5
 	draw_set_transform(o, 0.0, Vector2(s / 100.0, s / 100.0))
@@ -38,6 +55,10 @@ func _draw() -> void:
 		"olio": _oil()
 		"castello": _castle()
 		"chiesa": _church()
+		"evento": _event()
+		"moneta": _coin()
+		"fede": _cross()
+		"elmo": _helmet()
 		"stella": _star()
 		"lucchetto": _lock()
 
@@ -121,6 +142,35 @@ func _castle() -> void:
 	for x: int in [12, 40, 68]:
 		draw_rect(Rect2(x, 22, 20, 30), _c(STONE))
 	draw_rect(Rect2(42, 66, 16, 24), _c(DARK))
+
+
+func _coin() -> void:
+	draw_circle(Vector2(50, 50), 44, _c(DARK))
+	draw_circle(Vector2(50, 50), 37, _c(YELLOW))
+	draw_arc(Vector2(50, 50), 26, 0.0, TAU, 28, _c(ORANGE), 6.0, true)
+	draw_rect(Rect2(45, 34, 10, 32), _c(ORANGE))
+
+
+func _cross() -> void:
+	draw_rect(Rect2(36, 4, 28, 92), _c(DARK))
+	draw_rect(Rect2(12, 26, 76, 28), _c(DARK))
+	draw_rect(Rect2(43, 11, 14, 78), _c(WHITE))
+	draw_rect(Rect2(19, 33, 62, 14), _c(WHITE))
+
+
+func _helmet() -> void:  # una spada: si legge subito come «soldati»
+	draw_rect(Rect2(38, 2, 24, 72), _c(DARK))
+	draw_rect(Rect2(16, 60, 68, 20), _c(DARK))
+	draw_rect(Rect2(39, 76, 22, 22), _c(DARK))
+	draw_rect(Rect2(44, 7, 12, 60), _c(WHITE))
+	draw_rect(Rect2(22, 65, 56, 10), _c(YELLOW))
+	draw_rect(Rect2(45, 78, 10, 14), _c(ORANGE))
+
+
+func _event() -> void:
+	draw_rect(Rect2(24, 8, 8, 84), _c(STONE))
+	draw_colored_polygon(PackedVector2Array([Vector2(32, 12), Vector2(88, 12), Vector2(70, 32), Vector2(88, 52), Vector2(32, 52)]), _c(ORANGE))
+	draw_rect(Rect2(32, 26, 36, 6), _c(YELLOW))
 
 
 func _church() -> void:

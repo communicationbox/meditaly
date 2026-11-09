@@ -204,6 +204,10 @@ func event(kind: String, p: Vector3, a: float) -> void:
 	match kind:
 		"say":
 			_say(int(a) / 1000, (int(a) % 1000) / 50, int(a) % 50, p)
+		"say_name":
+			var who := (int(a) / 1000) % 100
+			var named: String = game.hud._display_name(who) if game and game.hud else ""
+			_say(int(a) / 100000, (int(a) % 1000) / 50, int(a) % 50, p, named)
 		"taunt":
 			var cam := get_viewport().get_camera_3d()
 			if cam:
@@ -300,7 +304,7 @@ func event(kind: String, p: Vector3, a: float) -> void:
 		"capture":
 			sfx.play("horn", p, 6.0, 0.0)
 			for k in 60:
-				var col: Color = Defs.HOUSES[randi() % 8].color
+				var col: Color = Defs.HOUSES[randi() % Defs.HOUSE_COUNT].color
 				_spawn_debris(p + Vector3(randf_range(-6, 6), 12, randf_range(-6, 6)), Vector3(randf_range(-10, 10), randf_range(4, 15), randf_range(-10, 10)), col, randf_range(1.4, 3), 16.0, 0.3)
 		"king_dead":
 			_king_dead(p, int(a))
@@ -541,7 +545,8 @@ func _update_arrows(dt: float) -> void:
 ## Re ucciso: a = vecchio padrone + 16 * chi l'ha ucciso. Chi è coinvolto se lo gode in primo piano.
 func _king_dead(p: Vector3, a: int) -> void:
 	var was := a % 16
-	var by := a / 16
+	var by := (a / 16) % 16
+	var variant := a / 256
 	var cid := -1
 	var bd := 1e9
 	for c: Dictionary in game.castles:
@@ -551,14 +556,80 @@ func _king_dead(p: Vector3, a: int) -> void:
 			cid = c.id
 	var delay := 0.0
 	if cid >= 0 and game.my_house >= 0 and (game.my_house == was or game.my_house == by) and game.ctrl:
-		game.ctrl.king_cinematic(game.castles[cid], was)
+		game.ctrl.king_cinematic(game.castles[cid], was, variant)
 		delay = game.ctrl.CINE_CLOSE
 	if cid >= 0:
 		king_gone[cid] = Time.get_ticks_msec() / 1000.0 + delay + 3.2
 	if delay > 0.0:
-		get_tree().create_timer(delay).timeout.connect(_king_flies.bind(p, was))
+		get_tree().create_timer(delay).timeout.connect(_king_exits.bind(p, was, variant, cid))
 	else:
-		_king_flies(p, was)
+		_king_exits(p, was, variant, cid)
+
+
+## L'uscita di scena: il volo col gabinetto, o una delle altre.
+func _king_exits(p: Vector3, house: int, variant: int, cid: int) -> void:
+	if variant <= 0 or cid < 0:
+		_king_flies(p, house)
+		return
+	var c: Dictionary = game.castles[cid]
+	var col: Color = Defs.HOUSES[clampi(house, 0, Defs.HOUSES.size() - 1)].color
+	var mi := MeshInstance3D.new()
+	mi.mesh = UnitModels.new().re_scena(col, variant)
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.vertex_color_is_srgb = true
+	mi.material_override = mat
+	add_child(mi)
+	mi.scale = Vector3.ONE * 2.2
+	flying_king = mi
+	var gate: Vector3 = c.gate_out
+	var dir: Vector3 = c.dir
+	var ground := func(q: Vector3) -> float:
+		return float(game.world.top_y(int(q.x), int(q.z)))
+	var face := atan2(dir.x, dir.z)
+	var tw := create_tween()
+	match variant:
+		1:  # la botte rotola fuori dal portone
+			sfx.play("boing", gate, 4.0, 0.0)
+			tw.tween_method(func(t: float) -> void:
+				var q := gate + dir * (t * 42.0 - 4.0)
+				mi.global_position = Vector3(q.x, ground.call(q) + 1.8, q.z)
+				mi.rotation = Vector3(t * 16.0, face, 0.0), 0.0, 1.0, 2.4)
+		2:  # il trono a molla lo spara in cielo
+			sfx.play("boing", p, 8.0, 0.0)
+			sfx.play("horn", p, 0.0, 0.3)
+			var far := Vector3(dir.z, 0, -dir.x) * 70.0
+			tw.tween_method(func(t: float) -> void:
+				mi.global_position = p + far * t * t + Vector3(0, WorldGen.KEEP_H + 2.0 + 150.0 * t - 60.0 * t * t, 0)
+				mi.rotation = Vector3(t * 2.0, t * 7.0, sin(t * 9.0) * 0.5), 0.0, 1.0, 2.4)
+		3:  # la moglie se lo porta via per un orecchio
+			sfx.play("voice", gate, 6.0, 0.3)
+			tw.tween_method(func(t: float) -> void:
+				var q := gate + dir * (t * 34.0 - 4.0)
+				mi.global_position = Vector3(q.x, ground.call(q) + absf(sin(t * 26.0)) * 0.5, q.z)
+				mi.rotation = Vector3(0.0, face, sin(t * 26.0) * 0.08), 0.0, 1.0, 2.4)
+		4:  # la tinozza affonda piano, con dignità
+			var at := gate + dir * 14.0
+			at.y = ground.call(at)
+			var pool := MeshInstance3D.new()
+			var box := BoxMesh.new()
+			box.size = Vector3(22.0, 0.12, 22.0)
+			pool.mesh = box
+			var pm := StandardMaterial3D.new()
+			pm.albedo_color = Color(0.25, 0.58, 0.9)
+			pool.material_override = pm
+			add_child(pool)
+			pool.global_position = at + Vector3(0, 0.2, 0)
+			tw.tween_method(func(t: float) -> void:
+				var sink := maxf(t - 0.45, 0.0) / 0.55
+				mi.global_position = at + dir * (t * 5.0) + Vector3(0, 0.2 - sink * 3.4 + sin(t * 14.0) * 0.14, 0)
+				mi.rotation = Vector3(sin(t * 11.0) * 0.08, face, sin(t * 8.0) * 0.12), 0.0, 1.0, 2.4)
+			tw.tween_callback(pool.queue_free)
+	tw.tween_callback(func() -> void:
+		smoke(mi.global_position, 2.0, 10)
+		mi.queue_free())
+
+
 
 
 ## Il re ucciso schizza fuori dal tetto del mastio, gabinetto compreso, girando su se stesso.
@@ -589,7 +660,12 @@ func _king_flies(p: Vector3, house: int) -> void:
 
 
 # ---------------------------------------------------------------- fumetti e sagre
-const MAX_BUBBLES := 6
+const MAX_BUBBLES := 2
+## Fra un fumetto e l'altro, e prima che la stessa frase torni: meglio poche battute ma lette.
+var bubble_cooldown := 5.0
+var bubble_repeat := 150.0
+var _bubble_wait := 0.0
+var _bubble_seen := {}  # testo -> istante in cui si potrà ripetere
 const BUBBLE_GAP := 4.0
 const BUBBLE_MAX_PUSH := 130.0
 var bubbles: Array = []
@@ -598,7 +674,7 @@ var bubble_layer: CanvasLayer
 
 ## Fumetto sopra il soldato che parla: segue l'unità, entra con un piccolo salto e sfuma.
 ## Solo se è in vista e non troppo lontano, altrimenti nessuno lo legge comunque.
-func _say(id: int, cat: int, line: int, p: Vector3) -> void:
+func _say(id: int, cat: int, line: int, p: Vector3, named := "") -> void:
 	if cat < 0 or cat >= Defs.SAY.size():
 		return
 	var lines: Array = Defs.SAY[cat]
@@ -609,6 +685,14 @@ func _say(id: int, cat: int, line: int, p: Vector3) -> void:
 	var vs := get_viewport().get_visible_rect().size
 	if sp.x < -40 or sp.y < -40 or sp.x > vs.x + 40 or sp.y > vs.y + 40:
 		return
+	var text := String(lines[line % lines.size()]).format({"n": named})
+	var now := Time.get_ticks_msec() / 1000.0
+	if cat != Defs.SAY_SFOTTO:  # gli sfottò li manda chi gioca: quelli passano sempre
+		var waiting := now < _bubble_wait and named == ""  # le frasi col tuo nome saltano la fila
+		if waiting or (bubbles.size() >= MAX_BUBBLES and named == "") or now < float(_bubble_seen.get(text, 0.0)):
+			return
+	_bubble_wait = now + bubble_cooldown
+	_bubble_seen[text] = now + bubble_repeat
 	while bubbles.size() >= MAX_BUBBLES:
 		(bubbles.pop_front().node as Node).queue_free()
 	if bubble_layer == null:
@@ -616,24 +700,29 @@ func _say(id: int, cat: int, line: int, p: Vector3) -> void:
 		bubble_layer.layer = 0  # sotto l'interfaccia, sopra il mondo
 		add_child(bubble_layer)
 	var l := Label.new()
-	l.text = String(lines[line % lines.size()])
+	l.text = text
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	l.add_theme_font_override("font", UiStyle.title_font())
-	l.add_theme_font_size_override("font_size", 17)
-	l.add_theme_color_override("font_color", Color(0.16, 0.09, 0.04))
+	l.add_theme_font_override("font", UiStyle.comic_font())
+	l.add_theme_font_size_override("font_size", 20)
+	var ink: Color = Defs.SAY_COLORS[cat]
+	l.add_theme_color_override("font_color", ink)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(1.0, 0.82, 0.42, 0.97) if cat == Defs.SAY_SFOTTO else Color(0.99, 0.95, 0.84, 0.97)
-	sb.border_color = Color(0.2, 0.11, 0.05)
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(8)
-	sb.content_margin_left = 9
-	sb.content_margin_right = 9
-	sb.content_margin_top = 2
-	sb.content_margin_bottom = 3
+	sb.border_color = ink.darkened(0.25)
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(14)
+	sb.content_margin_left = 12
+	sb.content_margin_right = 12
+	sb.content_margin_top = 3
+	sb.content_margin_bottom = 4
+	sb.shadow_color = Color(0, 0, 0, 0.35)
+	sb.shadow_size = 2
+	sb.shadow_offset = Vector2(2, 3)
 	l.add_theme_stylebox_override("normal", sb)
 	bubble_layer.add_child(l)
 	l.size = l.get_combined_minimum_size()
 	l.pivot_offset = l.size * 0.5
+	l.rotation = randf_range(-0.04, 0.04)  # storti quanto basta, come in una striscia
 	l.visible = false  # lo posiziona _update_bubbles, così non compare per un frame nell'angolo
 	sfx.play("voice", p, 0.0, 0.3)
 	bubbles.append({"node": l, "id": id, "t": 0.0, "pos": p, "off": NAN, "life": 2.6 + l.text.length() * 0.03})

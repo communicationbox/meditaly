@@ -9,6 +9,8 @@ var room: MeshInstance3D
 var room_mat: StandardMaterial3D
 var king_mm: MultiMesh
 var torch: OmniLight3D
+var prop: MeshInstance3D
+var king_mi: MultiMeshInstance3D
 
 
 func setup(unit_material: Material) -> void:
@@ -29,6 +31,10 @@ func setup(unit_material: Material) -> void:
 	kmi.multimesh = king_mm
 	kmi.material_override = unit_material
 	add_child(kmi)
+	king_mi = kmi
+	prop = MeshInstance3D.new()
+	prop.material_override = room_mat
+	add_child(prop)
 	king_mm.set_instance_transform(0, Transform3D(Basis.IDENTITY, Vector3.ZERO))
 	torch = OmniLight3D.new()
 	torch.light_color = Color(1.0, 0.72, 0.4)
@@ -40,8 +46,14 @@ func setup(unit_material: Material) -> void:
 
 
 ## Mostra il set con lo stendardo e la veste del re del colore della casata che lo perde.
-func show_for(house: int) -> void:
-	room.mesh = _build_room(Defs.HOUSES[clampi(house, 0, Defs.HOUSES.size() - 1)].color)
+func show_for(house: int, variant := 0) -> void:
+	var col: Color = Defs.HOUSES[clampi(house, 0, Defs.HOUSES.size() - 1)].color
+	room.mesh = _build_room(col)
+	king_mi.visible = variant == 0
+	prop.visible = variant != 0
+	if variant != 0:
+		prop.mesh = UnitModels.new().re_scena(col, variant)
+		prop.scale = Vector3.ONE * (0.66 if variant == 2 else 0.8)  # le figure alte devono stare in quadro
 	king_mm.set_instance_custom_data(0, Color(0.0, 0.0, 1.0, float(house)))
 	visible = true
 

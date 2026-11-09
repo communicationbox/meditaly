@@ -78,17 +78,18 @@ var stage: KingStage
 
 ## Il re sul gabinetto ripreso sul set (stesso stile del mastio, ma largo e illuminato),
 ## poi stacco sul mastio vero mentre il re vola via dal tetto.
-func king_cinematic(c: Dictionary, was: int) -> void:
+func king_cinematic(c: Dictionary, was: int, variant := 0) -> void:
 	if not cine.is_empty():
 		return
 	if stage == null:
 		stage = KingStage.new()
 		game.add_child(stage)
 		stage.setup(game.renderer.unit_material)
-	stage.show_for(was)
+	stage.show_for(was, variant)
 	cine = {"t": 0.0, "c": c}
 	if game.hud:
-		game.hud.letterbox(true, "%s di %s, sorpreso sul trono. Quello piccolo." % ["Il Podestà" if game.castle_owner(c.id) == Defs.NEUTRAL else "Il Re", c.name])
+		var who := "Il Podestà" if game.castle_owner(c.id) == Defs.NEUTRAL else "Il Re"
+		game.hud.letterbox(true, String(Defs.KING_DEATHS[clampi(variant, 0, Defs.KING_DEATHS.size() - 1)]) % [who, c.name])
 
 
 func end_cinematic() -> void:
@@ -134,7 +135,7 @@ func _cine_tick(dt: float) -> void:
 			stage.hide_stage()
 		# stacco sul mastio vero: la telecamera insegue il re che vola via dal tetto
 		var fk: Node3D = game.fx.flying_king if game.fx and is_instance_valid(game.fx.flying_king) else null
-		look = fk.global_position if fk else kp + Vector3(0, 20, 0)
+		look = fk.global_position + Vector3(0, 2.6, 0) if fk else kp + Vector3(0, 20, 0)
 		var want := look + dir * 16.0 + side * 6.0 + Vector3(0, 5.0, 0)
 		if not cine.has("chase"):
 			cine.chase = want
@@ -233,8 +234,88 @@ func _pending_radius() -> float:
 	return 0.0
 
 
+## La forma di Parmigiano si lancia a mano: si preme dove parte, si trascina verso dove deve
+## andare, e la lunghezza del vettore è la potenza. Un clic senza trascinare resta il tiro automatico.
+var aim: Dictionary = {}
+var aim_arrow: Node3D
+var aim_mat: StandardMaterial3D
+var _aim_shaft: MeshInstance3D
+var _aim_head: MeshInstance3D
+
+
+func _is_wheel_pending() -> bool:
+	return String(pending.get("kind", "")) == "power" and int(pending.get("id", -1)) == Defs.P_PARMIGIANO
+
+
+func _aim_begin() -> void:
+	var hit := _ray()
+	if hit.get("hit", false):
+		aim = {"start": hit.point, "vec": Vector3.ZERO}
+
+
+func _aim_release() -> void:
+	var v: Vector3 = aim.vec
+	var start: Vector3 = aim.start
+	aim = {}
+	if v.length() >= Sim.WHEEL_AIM_MIN:
+		game.send_cmd("power_aim", [Defs.P_PARMIGIANO, start, v])
+	else:
+		game.send_cmd("power", [Defs.P_PARMIGIANO, start])
+	pending = {}
+
+
+## Da 0 a 1: quanta potenza dà il vettore attuale.
+func aim_power() -> float:
+	if aim.is_empty():
+		return 0.0
+	return clampf(((aim.vec as Vector3).length() - Sim.WHEEL_AIM_MIN) / (Sim.WHEEL_AIM_MAX - Sim.WHEEL_AIM_MIN), 0.0, 1.0)
+
+
+func _update_aim_arrow() -> void:
+	if aim.is_empty():
+		if aim_arrow:
+			aim_arrow.visible = false
+		return
+	var hit := _ray()
+	if hit.get("hit", false):
+		var v: Vector3 = (hit.point as Vector3) - (aim.start as Vector3)
+		v.y = 0.0
+		aim.vec = v.limit_length(Sim.WHEEL_AIM_MAX)
+	if aim_arrow == null:
+		aim_arrow = Node3D.new()
+		game.add_child(aim_arrow)
+		aim_mat = StandardMaterial3D.new()
+		aim_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		aim_mat.no_depth_test = true
+		_aim_shaft = MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = Vector3(1.0, 0.5, 1.0)
+		_aim_shaft.mesh = box
+		_aim_shaft.material_override = aim_mat
+		aim_arrow.add_child(_aim_shaft)
+		_aim_head = MeshInstance3D.new()
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.0
+		cone.bottom_radius = 3.4
+		cone.height = 7.0
+		_aim_head.mesh = cone
+		_aim_head.material_override = aim_mat
+		_aim_head.rotation = Vector3(PI * 0.5, 0.0, 0.0)
+		aim_arrow.add_child(_aim_head)
+	var vec: Vector3 = aim.vec
+	var len_v := maxf(vec.length(), 0.5)
+	aim_arrow.visible = true
+	aim_arrow.global_position = (aim.start as Vector3) + Vector3(0, 3.0, 0)
+	aim_arrow.rotation = Vector3(0.0, atan2(vec.x, vec.z), 0.0)
+	_aim_shaft.scale = Vector3(1.8, 1.0, len_v)
+	_aim_shaft.position = Vector3(0, 0, len_v * 0.5)
+	_aim_head.position = Vector3(0, 0, len_v + 3.0)
+	aim_mat.albedo_color = Color(0.3, 0.95, 0.3).lerp(Color(1.0, 0.18, 0.1), aim_power())
+
+
 func _update_marker() -> void:
-	if pending.is_empty():
+	_update_aim_arrow()
+	if pending.is_empty() or not aim.is_empty():
 		marker.visible = false
 		return
 	var hit := _ray()
@@ -283,18 +364,23 @@ func _unhandled_input(event: InputEvent) -> void:
 			target_dist = minf(target_dist * 1.14, 800.0 * Defs.MAP_SCALE)
 		elif e.button_index == MOUSE_BUTTON_LEFT:
 			if e.pressed:
-				if not pending.is_empty():
+				if _is_wheel_pending():
+					_aim_begin()
+				elif not pending.is_empty():
 					_confirm_action()
 				else:
 					dragging = true
 					drag_start = e.position
 					drag_now = e.position
+			elif not aim.is_empty():
+				_aim_release()
 			elif dragging:
 				dragging = false
 				_finish_selection(e.position, e.shift_pressed)
 		elif e.button_index == MOUSE_BUTTON_RIGHT and e.pressed:
 			if not pending.is_empty():
 				pending = {}
+				aim = {}
 			else:
 				_give_order()
 	elif event is InputEventMouseMotion:
@@ -338,6 +424,8 @@ func _on_key(k: Key) -> void:
 			if selected_castle >= 0: start_action("oil", selected_castle)
 		KEY_F1:
 			game.hud.toggle_help()
+		KEY_MINUS, KEY_KP_SUBTRACT:
+			game.hud.toggle_debug()
 		KEY_H:
 			game.hud.toggle_ui()
 

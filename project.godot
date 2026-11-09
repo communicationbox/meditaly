@@ -10,6 +10,7 @@ config_version=5
 
 [application]
 
+config/icon="res://assets/ui/stemma.svg"
 config/name="MedItaly - Signori d'Italia"
 config/description="Conquista l'Italia medievale: assedi voxel in tempo reale."
 run/main_scene="res://scenes/main.tscn"

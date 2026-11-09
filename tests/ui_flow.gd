@@ -56,6 +56,34 @@ func click(p: Vector2, button := MOUSE_BUTTON_LEFT) -> void:
 		await wait_frames(2)
 
 
+func drag_power(a: Vector2, b: Vector2) -> void:
+	for step: Array in [[a, true, false], [b, false, true]]:
+		root.warp_mouse(step[0])
+		var m := InputEventMouseMotion.new()
+		m.position = step[0]
+		m.global_position = step[0]
+		Input.parse_input_event(m)
+		await wait_frames(3)
+		if step[1]:
+			var d := InputEventMouseButton.new()
+			d.button_index = MOUSE_BUTTON_LEFT
+			d.position = step[0]
+			d.global_position = step[0]
+			d.pressed = true
+			d.button_mask = MOUSE_BUTTON_MASK_LEFT
+			Input.parse_input_event(d)
+			await wait_frames(3)
+	await wait_frames(3)
+	await shot("ui_mira_trascina")
+	var u := InputEventMouseButton.new()
+	u.button_index = MOUSE_BUTTON_LEFT
+	u.position = b
+	u.global_position = b
+	u.pressed = false
+	Input.parse_input_event(u)
+	await wait_frames(3)
+
+
 func key(k: Key) -> void:
 	for pressed: bool in [true, false]:
 		var e := InputEventKey.new()
@@ -88,8 +116,14 @@ func _run() -> void:
 	var firenze: Dictionary = Defs.CASTLES[5]
 	await click((main.menu.shield_btns[4] as Control).get_global_rect().get_center())
 	check("clic su Firenze sceglie i Medici", main.menu.house == 4)
+	main.menu.name_edit.text = ""
+	await click(solo.get_global_rect().get_center())
+	check("senza nome non si parte", not main.menu._starting)
+	main.menu.name_edit.text = "Prova"
 	await click(solo.get_global_rect().get_center())
 	check("dopo il clic compare la rotella", main.menu._starting)
+	Settings.player_name = ""  # il nome di prova non deve restare nelle impostazioni di chi gioca
+	Settings.save_all()
 	while main.game == null:
 		await process_frame
 	await wait_s(1.0)
@@ -187,6 +221,14 @@ func _run() -> void:
 	await shot("ui_mira")
 	await click(Vector2(800, 300))
 	check("clic lancia il Parmigiano", sim.wheels.size() == 1 and c.pending.is_empty())
+	# tenendo premuto e trascinando si sceglie direzione e potenza
+	sim.wheels.clear()
+	sim.houses[4].cd[Defs.P_PARMIGIANO] = 0.0
+	sim.houses[4].faith = 150.0
+	await key(KEY_1)
+	await drag_power(Vector2(700, 380), Vector2(1000, 380))
+	check("trascinando parte la forma col vettore scelto", sim.wheels.size() == 1 and c.pending.is_empty() and absf((sim.wheels[0].vel as Vector3).length() - 34.0) > 0.5)
+	await wait_s(0.2)
 	await wait_s(1.0)
 	await shot("ui_forma")
 	# pulsante potere dall'interfaccia, annullo col destro
@@ -197,6 +239,28 @@ func _run() -> void:
 	check("pulsante potere arma la mira", c.pending.get("id", -1) == Defs.P_SCUDO)
 	await click(Vector2(800, 300), MOUSE_BUTTON_RIGHT)
 	check("clic destro annulla la mira", c.pending.is_empty())
+	await key(KEY_MINUS)
+	await wait_frames(3)
+	check("il tasto - apre il debug", hud.debug_panel != null and hud.debug_panel.visible)
+	await shot("ui_debug")
+	await key(KEY_MINUS)
+	# evento: dopo il titolo resta un'icona che porta sul posto, e sparisce quando finisce
+	check("l'evento parte", sim._run_event(3))
+	await wait_frames(3)
+	check("arriva il giornale e il gioco si ferma", is_instance_valid(hud.paper_layer) and sim.news_t > 0.0)
+	await wait_s(0.8)
+	await shot("ui_giornale")
+	hud._resume_paper()
+	await wait_frames(3)
+	check("girata la pagina si riprende", sim.news_t <= 0.0 and not is_instance_valid(hud.paper_layer))
+	check("l'evento lascia un'icona", hud.event_icons.size() == 1)
+	await shot("ui_evento")
+	c.focus = Vector3(100, 20, 100)
+	await click((hud.event_icons[0].btn as Button).get_global_rect().get_center())
+	check("l'icona porta sull'evento", c.focus.distance_to(sim.castles[7].center) < 2.0)
+	hud.event_icons[0].t = 0.05
+	await wait_s(0.3)
+	check("finito l'evento l'icona sparisce", hud.event_icons.is_empty())
 	# difese da tastiera sul castello
 	await key(KEY_SPACE)
 	c.selected_castle = 5

@@ -80,12 +80,15 @@ func _run() -> void:
 		if (n as Button).text.begins_with("Tutorial"):
 			btn = n
 	check("pulsante Tutorial nel menu", btn != null)
+	main.menu.name_edit.text = "Prova"  # senza nome il gioco non parte
 	await shot("tut_menu")
 	await click(btn.get_global_rect().get_center())
 	while main.game == null:
 		await process_frame
 	await create_timer(1.5).timeout
 	var g: Game = main.game
+	Settings.player_name = ""  # il nome di prova non resta nelle impostazioni di chi gioca
+	Settings.save_all()
 	var t: Tutorial = g.tutorial
 	check("il tutorial parte", t != null and t.index == 0)
 	check("IA ferma durante il tutorial", g.sim.ai_enabled == false)
