@@ -1649,6 +1649,10 @@ func _update_rank(counts: Dictionary, hs: Array) -> void:
 
 func _update_labels(cs: Array) -> void:
 	var sel: int = game.ctrl.selected_castle
+	var owned := 0
+	for row: Array in cs:
+		if int(row[0]) == game.my_house:
+			owned += 1
 	for i in cs.size():
 		var o: int = cs[i][0]
 		var cap: float = cs[i][1]
@@ -1663,7 +1667,8 @@ func _update_labels(cs: Array) -> void:
 			l.modulate = UiStyle.DANGER_TEXT
 			l.font_size = 30
 		elif is_mine:
-			l.text = "IL TUO CASTELLO\n%s%s" % [game.castles[i].name, extra]
+			# con più castelli la scritta grande resta solo su quello scelto, sennò da lontano si accavallano
+			l.text = ("IL TUO CASTELLO\n%s%s" if owned == 1 or i == sel else "%s%s") % [game.castles[i].name, extra]
 			l.modulate = Color(1.0, 0.85, 0.4)
 			l.font_size = 30
 		else:
