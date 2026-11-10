@@ -224,6 +224,42 @@ func _enter_game() -> void:
 		demo.setup(self)
 	if "--scena-re" in test_args:
 		_king_scene_loop()
+	if "--finale" in test_args:
+		_finale_loop()
+
+
+var finale: Finale
+
+
+## Il gran finale di chi vince: parte appena finita la scena dell'ultimo re e il titolo del castello.
+func play_finale() -> void:
+	if finale != null or not is_view or my_house < 0:
+		return
+	await get_tree().create_timer(0.8).timeout
+	while is_inside_tree() and ctrl and not ctrl.cine.is_empty():
+		await get_tree().process_frame
+	if not is_inside_tree():
+		return
+	await get_tree().create_timer(2.5).timeout
+	if is_inside_tree() and finale == null:
+		start_finale()
+
+
+func start_finale() -> Finale:
+	finale = Finale.new()
+	add_child(finale)
+	finale.setup(self, my_house)
+	return finale
+
+
+## Solo il finale, ripetuto, per guardarlo senza dover conquistare l'Italia.
+func _finale_loop() -> void:
+	sim.ai_enabled = false
+	while is_inside_tree():
+		await get_tree().create_timer(1.0).timeout
+		var f := start_finale()
+		await f.finished
+		finale = null
 
 
 ## Solo la scena del re sul gabinetto, ripetuta, per guardarla senza dover conquistare un castello.

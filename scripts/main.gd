@@ -6,6 +6,7 @@ extends Node
 ##   -- --tutorial [--house N]     partita guidata
 ##   -- --demo                     dimostrazione: assedio visto dall'alto + screenshot
 ##   -- --scena-re                 solo la scena del re sul gabinetto, a ripetizione
+##   -- --finale                   solo il finale di chi vince, a ripetizione
 
 var game: Game
 var menu: Control
@@ -32,7 +33,7 @@ func _ready() -> void:
 		_start_game().start_dedicated(_opt(a, "--port", str(Defs.PORT)).to_int(), a)
 	elif "--connect" in a:
 		_start_game().start_client(_opt(a, "--connect", "127.0.0.1"), _opt(a, "--port", str(Defs.PORT)).to_int(), pref, pname, a)
-	elif "--solo" in a or "--demo" in a or "--tutorial" in a or "--scena-re" in a:
+	elif "--solo" in a or "--demo" in a or "--tutorial" in a or "--scena-re" in a or "--finale" in a:
 		_start_game().start_solo(pref, pname, a)
 	else:
 		_show_menu()

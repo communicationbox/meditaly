@@ -14,6 +14,7 @@ GODOT="/Applications/Godot 2.app/Contents/MacOS/Godot"
 "$GODOT" --headless --path . -- --server         # server dedicato
 "$GODOT" --path . -- --connect 192.168.1.10      # entra in una partita
 "$GODOT" --path . -- --scena-re                 # solo la scena del re sul gabinetto, a ripetizione
+"$GODOT" --path . -- --finale --house 4          # solo il finale di chi vince, a ripetizione
 ```
 
 Casate (`--house`): 0 Savoia, 1 Visconti, 2 Serenissima, 3 Doria, 4 Medici, 5 Papato, 6 Angioini, 7 Normanni.
@@ -37,7 +38,7 @@ Casate (`--house`): 0 Savoia, 1 Visconti, 2 Serenissima, 3 Doria, 4 Medici, 5 Pa
 
 ### Regole
 
-Recluta dal castello con i fiorini, porta l'armata al nemico ed entra nel cortile: il castello è tuo quando uccidi il re, che sta nel mastio seduto sul gabinetto. Se nessuno lo colpisce per qualche secondo si riprende. Vince chi prende tutti i 12 castelli. Le truppe attraversano il mare in barca.
+Recluta dal castello con i fiorini, porta l'armata al nemico ed entra nel cortile: il castello è tuo quando uccidi il re, che sta nel mastio seduto sul gabinetto. Se nessuno lo colpisce per qualche secondo si riprende. Vince chi prende tutti i castelli: chi vince si guarda il finale, con il re portato in trionfo sullo scudo e il banchetto sotto le stelle. Le truppe attraversano il mare in barca.
 
 **Assedio.** Le mura hanno un vero supporto strutturale: ciò che si stacca dal terreno cade come corpo rigido e schiaccia ciò che colpisce. La fanteria cerca la strada più breve, passa dalle brecce appena si aprono e altrimenti abbatte la porta.
 
@@ -83,6 +84,7 @@ tests/net_test.sh                                     # server + 2 client: mondi
 "$GODOT" --headless --path . -s tests/knight_rush.gd -- --games 9 --min 20   # una casata fa solo cavalieri: non deve vincere sempre
 "$GODOT" --path . -s tests/save_flow.gd -- CARTELLA      # pausa, salva, torna al menu, continua: mondo identico
 "$GODOT" --path . -s tests/menu_shots.gd -- CARTELLA      # il menu principale sull'Italia in voxel
+"$GODOT" --path . -s tests/finale_shots.gd -- CARTELLA    # il finale di chi vince, inquadratura per inquadratura
 "$GODOT" --path . -s tests/shops_shots.gd -- CARTELLA     # le sei botteghe, i loro personaggi e il menu
 "$GODOT" --path . -s tests/fun_shots.gd -- CARTELLA       # sagra, fumetti, sciopero, sfottò
 "$GODOT" --path . -s tests/menu_panels.gd -- CARTELLA     # caricamento, menu, impostazioni, pausa

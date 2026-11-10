@@ -1619,6 +1619,8 @@ func on_state() -> void:
 		var w: int = game.state[2]
 		victory.text = "%s, signore d'Italia!" % _display_name(w)
 		victory.add_theme_color_override("font_color", Defs.HOUSES[w].color.lerp(Color.WHITE, 0.3))
+		if w == game.my_house and game.tutorial == null:
+			game.play_finale()
 	_update_labels(cs)
 	_refresh_panels()
 

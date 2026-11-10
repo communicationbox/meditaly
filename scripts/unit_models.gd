@@ -381,6 +381,59 @@ func re_volante(robe: Color, pose := 0) -> ArrayMesh:
 	return st.commit()
 
 
+## Il re portato in trionfo: in piedi su un grande scudo tondo, senza braccia (sono a parte,
+## vedi re_braccio, così il finale le muove dalla spalla e salutano senza spezzarsi).
+func re_trionfo(robe: Color) -> ArrayMesh:
+	_begin(1.2)
+	# scudo tondo a gradini: bordo d'oro, campo del colore della casata
+	var z := -1.3
+	while z < 1.3:
+		var hw := sqrt(maxf(1.69 - (z + 0.1) * (z + 0.1), 0.0))
+		_b(Vector3(-hw, 0.0, z), Vector3(hw, 0.12, z + 0.2), GOLD)
+		var hi := sqrt(maxf(1.21 - (z + 0.1) * (z + 0.1), 0.0))
+		if hi > 0.05:
+			_b(Vector3(-hi, 0.12, z), Vector3(hi, 0.18, z + 0.2), robe)
+		z += 0.2
+	# gambe e busto sopra lo scudo
+	_b(Vector3(-0.3, 0.18, -0.14), Vector3(-0.06, 0.9, 0.14), robe * 0.7)
+	_b(Vector3(0.06, 0.18, -0.14), Vector3(0.3, 0.9, 0.14), robe * 0.7)
+	_busto(robe, 0.0, 0.9, true, 0)
+	# spalle tonde dove si attaccano le braccia
+	_b(Vector3(-0.46, 1.38, -0.12), Vector3(-0.3, 1.6, 0.12), robe)
+	_b(Vector3(0.3, 1.38, -0.12), Vector3(0.46, 1.6, 0.12), robe)
+	# bocca aperta: sta gridando «grazie, grazie»
+	_b(Vector3(-0.1, 1.68, 0.22), Vector3(0.1, 1.78, 0.25), Color(0.24, 0.05, 0.05))
+	return st.commit()
+
+
+## Un braccio del re, dalla spalla (l'origine) verso il basso: manica, polsino d'ermellino, mano.
+const RE_SPALLA := Vector3(0.456, 1.79, 0.0)  # dove si attacca, già in scala 1.2: x col segno del lato
+
+
+func re_braccio(robe: Color) -> ArrayMesh:
+	_begin(1.2)
+	_b(Vector3(-0.09, -0.62, -0.09), Vector3(0.09, 0.06, 0.09), robe)
+	_b(Vector3(-0.1, -0.7, -0.1), Vector3(0.1, -0.62, 0.1), WHITE)
+	_b(Vector3(-0.08, -0.86, -0.08), Vector3(0.08, -0.7, 0.08), SKIN)
+	return st.commit()
+
+
+## Portatore dello scudo nel finale: un fante senza lancia, con le braccia alzate a reggere il re.
+func portatore() -> ArrayMesh:
+	_begin(1.15)
+	_legs(Color(0.28, 0.24, 0.22))
+	_b(Vector3(-0.3, 0.72, -0.17), Vector3(0.3, 1.36, 0.17), WHITE, 0, 0, true)
+	_b(Vector3(-0.31, 0.74, -0.18), Vector3(0.31, 0.84, 0.18), LEATHER)
+	_b(Vector3(-0.17, 1.38, -0.17), Vector3(0.17, 1.72, 0.17), SKIN)
+	_b(Vector3(-0.21, 1.6, -0.21), Vector3(0.21, 1.8, 0.21), STEEL)
+	_b(Vector3(-0.04, 1.42, 0.17), Vector3(0.04, 1.62, 0.2), STEEL)
+	_b(Vector3(-0.44, 1.2, -0.08), Vector3(-0.3, 2.0, 0.08), WHITE, 0, 0, true)
+	_b(Vector3(0.3, 1.2, -0.08), Vector3(0.44, 2.0, 0.08), WHITE, 0, 0, true)
+	_b(Vector3(-0.46, 2.0, -0.09), Vector3(-0.3, 2.12, 0.09), SKIN)
+	_b(Vector3(0.3, 2.0, -0.09), Vector3(0.46, 2.12, 0.09), SKIN)
+	return st.commit()
+
+
 ## Gambe del re in piedi, a partire dal pavimento.
 func _gambe(col: Color, x: float, h := 0.72) -> void:
 	_b(Vector3(x - 0.3, 0.0, -0.14), Vector3(x - 0.06, h, 0.14), col)
