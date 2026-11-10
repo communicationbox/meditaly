@@ -22,7 +22,7 @@ void fragment() {
 	col += vec3(0.02, 0.04, 0.05) * wave;
 	float foam = smoothstep(0.9 + wave * 0.4, 0.2, depth);
 	ALBEDO = mix(col, vec3(0.9, 0.95, 0.95), foam * 0.7);
-	ALPHA = mix(0.62, 0.97, smoothstep(0.0, 4.0, depth));
+	ALPHA = mix(0.62, 1.0, smoothstep(0.0, 4.5, depth));  // al largo opaco: niente fondale del mondo in trasparenza
 	ROUGHNESS = 0.18;
 	SPECULAR = 0.55;
 	NORMAL = normalize((VIEW_MATRIX * vec4(wave * 0.05, 1.0, w2 * 0.05, 0.0)).xyz);
