@@ -23,6 +23,16 @@ var home_castle := -1
 var cine: Dictionary = {}
 const CINE_CLOSE := 3.2
 const CINE_END := 5.6
+## Il trono a molla spara il re così in alto che sotto resta un'Italia piccolissima.
+## Quanto dura, fuori dal castello, ogni uscita di scena (0 è il volo col gabinetto).
+const EXIT_TIMES := [2.4, 4.4, 5.0, 4.6, 5.0, 8.5, 4.6, 3.8, 4.8, 5.4]
+const CHASE_VARIANT := 5  # la camicia da notte si guarda dall'alto
+const SKY_VARIANT := 2
+const SKY_TIME := 5.0
+const SKY_HEIGHT := 3000.0
+const SKY_BACK := 500.0
+const SKY_KING_GAP := 80.0
+const SKY_FAR := 9000.0
 
 
 func setup(g: Node) -> void:
@@ -86,7 +96,7 @@ func king_cinematic(c: Dictionary, was: int, variant := 0) -> void:
 		game.add_child(stage)
 		stage.setup(game.renderer.unit_material)
 	stage.show_for(was, variant)
-	cine = {"t": 0.0, "c": c}
+	cine = {"t": 0.0, "c": c, "v": variant, "end": CINE_CLOSE + exit_time(variant), "far": cam.far}
 	if game.hud:
 		var who := "Il Podestà" if game.castle_owner(c.id) == Defs.NEUTRAL else "Il Re"
 		game.hud.letterbox(true, String(Defs.KING_DEATHS[clampi(variant, 0, Defs.KING_DEATHS.size() - 1)]) % [who, c.name])
@@ -96,6 +106,7 @@ func end_cinematic() -> void:
 	if cine.is_empty():
 		return
 	var c: Dictionary = cine.c
+	cam.far = float(cine.far)
 	cine = {}
 	if stage:
 		stage.hide_stage()
@@ -107,6 +118,20 @@ func end_cinematic() -> void:
 			game.hud.banner("%s è tua!" % c.name, "+%d fiorini · i soldati festeggiano nel cortile" % int(Defs.CAPTURE_REWARD), c.center)
 		elif own >= 0 and own < Defs.HOUSES.size():
 			game.hud.banner("%s è caduta!" % c.name, "ora sventola la bandiera dei %s" % Defs.HOUSES[own].name, c.center)
+
+
+static func exit_time(variant: int) -> float:
+	return float(EXIT_TIMES[clampi(variant, 0, EXIT_TIMES.size() - 1)])
+
+
+func sky_camera() -> Vector3:
+	return Vector3(Defs.WX * 0.5, SKY_HEIGHT, Defs.WZ * 0.5 + SKY_BACK)
+
+
+## Dove finisce il re: appena sotto la telecamera, sopra il centro della penisola.
+func sky_king_end() -> Vector3:
+	var from := sky_camera()
+	return from + (Vector3(Defs.WX * 0.5, 0.0, Defs.WZ * 0.5) - from).normalized() * SKY_KING_GAP
 
 
 func cine_castle() -> int:
@@ -135,14 +160,54 @@ func _cine_tick(dt: float) -> void:
 			stage.hide_stage()
 		# stacco sul mastio vero: la telecamera insegue il re che vola via dal tetto
 		var fk: Node3D = game.fx.flying_king if game.fx and is_instance_valid(game.fx.flying_king) else null
-		look = fk.global_position + Vector3(0, 2.6, 0) if fk else kp + Vector3(0, 20, 0)
+		var look_want: Vector3 = fk.global_position + Vector3(0, 2.6, 0) if fk else kp + Vector3(0, 20, 0)
+		if not cine.has("look"):
+			cine.look = look_want
+		cine.look = (cine.look as Vector3).lerp(look_want, minf(dt * 9.0, 1.0))  # segue senza strappi
+		look = cine.look
+		var v_now := int(cine.v)
 		var want := look + dir * 16.0 + side * 6.0 + Vector3(0, 5.0, 0)
+		if v_now == 9:  # il conto: da dietro le spalle, per vedere il rotolo che non finisce mai
+			want = look - dir * 15.0 + side * 13.0 + Vector3(0, 15.0, 0)
+			look += dir * 9.0
+		elif v_now == 8:  # di fronte, abbastanza lontano da tenere in quadro il re e la sua nuvoletta
+			look += Vector3(0, 2.6, 0)
+			want = look + dir * 26.0 + side * 2.0 + Vector3(0, 0.5, 0)
+			want.y = maxf(want.y, float(game.world.top_y(int(want.x), int(want.z))) + 3.0)
+		elif v_now == 6 or v_now == 7:  # di fronte e bassa: chi scappa corre verso di noi
+			look -= dir * 5.0
+			want = look + dir * 24.0 + side * 3.0 + Vector3(0, 3.0 if v_now == 6 else 8.0, 0)  # con la 7 sopra gli alberi
+			want.y = maxf(want.y, float(game.world.top_y(int(want.x), int(want.z))) + 3.0)
+		elif v_now != 0:  # più in alto, sopra le chiome degli alberi
+			want = look + dir * 15.0 + side * 5.0 + Vector3(0, 13.0, 0)
 		if not cine.has("chase"):
 			cine.chase = want
 		cine.chase = (cine.chase as Vector3).lerp(want, minf(dt * 4.0, 1.0))
 		pos = cine.chase
-	cam.look_at_from_position(pos, look, Vector3.UP)
-	if t >= CINE_END:
+	var up := Vector3.UP
+	if t >= CINE_CLOSE and int(cine.v) == SKY_VARIANT and game.fx and is_instance_valid(game.fx.flying_king):
+		# verso l'alto: «su» è il nord, così la vista non si ribalta quando guarda dritto in verticale
+		# un'unica ripresa: lo si vede partire di lato, la telecamera lo supera e guarda giù
+		var k := clampf((t - CINE_CLOSE) / SKY_TIME, 0.0, 1.0)
+		var king_p: Vector3 = game.fx.flying_king.global_position
+		var side_off := dir * 55.0 + side * 22.0 + Vector3(0, -6, 0)
+		var over_off := sky_camera() - sky_king_end()
+		pos = king_p + side_off.lerp(over_off, smoothstep(0.12, 0.55, k))
+		look = king_p.lerp(Vector3(Defs.WX * 0.5, 0.0, Defs.WZ * 0.5), smoothstep(0.55, 1.0, k))
+		# guardando dritto in giù «su» diventa il nord, così la vista non si ribalta
+		up = Vector3.UP.lerp(Vector3(0, 0, -1), smoothstep(0.55, 0.9, absf((look - pos).normalized().y))).normalized()
+		cam.far = SKY_FAR
+	if t >= CINE_CLOSE and int(cine.v) == CHASE_VARIANT:
+		# prima da terra, davanti al portone; poi la telecamera si alza e li guarda girare in tondo
+		var f := clampf((t - CINE_CLOSE) / exit_time(CHASE_VARIANT), 0.0, 1.0)
+		var rise := smoothstep(0.26, 0.5, f)
+		var low: Vector3 = (c.gate_out as Vector3) + dir * 34.0 + side * 15.0 + Vector3(0, 8.0, 0)
+		pos = low.lerp((c.center as Vector3) + Vector3(0, 135.0, 38.0), rise)
+		var runner: Vector3 = game.fx.flying_king.global_position if game.fx and is_instance_valid(game.fx.flying_king) else c.gate_out
+		look = (runner + Vector3(0, 2.0, 0)).lerp(c.center, rise)
+		up = Vector3.UP.lerp(Vector3(0, 0, -1), smoothstep(0.55, 0.9, absf((look - pos).normalized().y))).normalized()
+	cam.look_at_from_position(pos, look, up)
+	if t >= float(cine.end):
 		end_cinematic()
 
 
@@ -228,6 +293,7 @@ func _pending_radius() -> float:
 				Defs.P_TERREMOTO: return 24.0
 				Defs.P_SCUDO: return 20.0
 				Defs.P_MUCCHE: return 15.0
+		"special": return Sim.SPECIAL_R
 		"mangano": return 4.0
 		"oil": return 7.0
 		"build": return Buildings.FOOT * 0.72
@@ -340,6 +406,17 @@ func _ray() -> Dictionary:
 	return game.world.raycast(cam.project_ray_origin(mp), cam.project_ray_normal(mp))
 
 
+## Il potere della casata: quelli che agiscono su di te partono subito, gli altri chiedono dove.
+func start_special() -> void:
+	var h: int = game.my_house
+	if h < 0 or h >= Defs.HOUSE_COUNT:
+		return
+	if bool(Defs.HOUSE_POWERS[h].self):
+		game.send_cmd("special", [focus])
+	else:
+		pending = {"kind": "special", "id": h}
+
+
 func start_action(kind: String, id: int) -> void:
 	if kind == "power" and not game.has_shop(Defs.POWER_BUILDING[id]):
 		if game.hud:
@@ -348,9 +425,22 @@ func start_action(kind: String, id: int) -> void:
 	pending = {"kind": kind, "id": id}
 
 
+## Salta la scena del re un tasto normale o un clic. Le combinazioni con Cmd, Ctrl, Alt e i soli
+## tasti modificatori no: Cmd+Maiusc+4, per esempio, serve a fare uno screenshot.
+static func skips_cinematic(event: InputEvent) -> bool:
+	if event is InputEventMouseButton:
+		return (event as InputEventMouseButton).pressed
+	if not event is InputEventKey:
+		return false
+	var k := event as InputEventKey
+	if not k.pressed or k.echo or k.meta_pressed or k.ctrl_pressed or k.alt_pressed:
+		return false
+	return not k.keycode in [KEY_SHIFT, KEY_META, KEY_CTRL, KEY_ALT, KEY_CAPSLOCK]
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not cine.is_empty():
-		if (event is InputEventKey and (event as InputEventKey).pressed) or (event is InputEventMouseButton and (event as InputEventMouseButton).pressed):
+		if skips_cinematic(event):
 			end_cinematic()
 			get_viewport().set_input_as_handled()
 		return
@@ -389,7 +479,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		if (event as InputEventMouseMotion).button_mask & MOUSE_BUTTON_MASK_MIDDLE:
 			yaw -= (event as InputEventMouseMotion).relative.x * 0.005
 	elif event is InputEventKey and (event as InputEventKey).pressed and not (event as InputEventKey).echo:
-		_on_key((event as InputEventKey).physical_keycode)
+		var ke := event as InputEventKey
+		# il meno va riconosciuto dal carattere: sulla tastiera italiana sta su un altro tasto fisico
+		if ke.unicode == 45 or ke.keycode == KEY_MINUS or ke.keycode == KEY_KP_SUBTRACT:
+			game.hud.toggle_debug()
+			return
+		_on_key(ke.physical_keycode)
 
 
 func _on_key(k: Key) -> void:
@@ -400,6 +495,8 @@ func _on_key(k: Key) -> void:
 			game.send_cmd("taunt", [int(k) - int(KEY_6)])
 		KEY_0:
 			game.send_cmd("taunt", [4])
+		KEY_X:
+			start_special()
 		KEY_ESCAPE:
 			# prima annulla mira e selezione; se non c'è niente da annullare apre la pausa
 			if game.hud.build_menu.visible:
@@ -424,8 +521,6 @@ func _on_key(k: Key) -> void:
 			if selected_castle >= 0: start_action("oil", selected_castle)
 		KEY_F1:
 			game.hud.toggle_help()
-		KEY_MINUS, KEY_KP_SUBTRACT:
-			game.hud.toggle_debug()
 		KEY_H:
 			game.hud.toggle_ui()
 
@@ -447,6 +542,7 @@ func _confirm_action() -> void:
 	var p: Vector3 = hit.point
 	match String(pending.kind):
 		"power": game.send_cmd("power", [int(pending.id), p])
+		"special": game.send_cmd("special", [p])
 		"mangano": game.send_cmd("mangano", [int(pending.id), p])
 		"oil": game.send_cmd("oil", [int(pending.id), p])
 		"build":

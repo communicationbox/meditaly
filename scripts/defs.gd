@@ -113,13 +113,36 @@ const CASTLES := [
 	{"name": "Cosenza", "lon": 16.45, "lat": 39.3, "house": 8, "wall": STONE, "gate": 1},
 ]
 
-## Didascalie delle uscite di scena del re: 0 gabinetto, 1 botte, 2 trono a molla, 3 moglie, 4 tinozza.
+## Il potere scemo di ogni casata (tasto X), stesso ordine di HOUSES. Niente Fede: solo l'attesa.
+## «self» parte subito, senza scegliere un punto sulla mappa.
+const HOUSE_POWERS := [
+	{"name": "Burocrazia sabauda", "short": "Burocrazia", "icon": "sp_modulo", "self": false, "desc": "Prima di proseguire, i nemici nella zona devono compilare un modulo in triplice copia", "quip": "manca il timbro, ripassate martedì"},
+	{"name": "Apericena", "short": "Apericena", "icon": "sp_apericena", "self": false, "desc": "I nemici nella zona mollano la guerra per uno spritz. Pagano loro, a te", "quip": "la guerra riprende dopo il tagliere"},
+	{"name": "Tassa di soggiorno", "short": "Tassa", "icon": "sp_tassa", "self": false, "desc": "Ogni nemico nella zona ti versa dei fiorini. Con ricevuta", "quip": "marca da bollo per tutti"},
+	{"name": "Prendi 2 paghi 1", "short": "2 per 1", "icon": "sp_sconto", "self": true, "desc": "Per 25 secondi i soldati costano la metà. Offerta valida fino a esaurimento dignità", "quip": "saldi di fine guerra"},
+	{"name": "La mazzetta", "short": "Mazzetta", "icon": "sp_mazzetta", "self": false, "desc": "Fino a 4 nemici nella zona cambiano bandiera. Si fattura a parte", "quip": "una busta, e l'onore si trova sempre"},
+	{"name": "Scomunica Express", "short": "Scomunica", "icon": "sp_scomunica", "self": false, "desc": "Chi è più presente nella zona resta senza Fede per 30 secondi, e i suoi soldati in ginocchio", "quip": "consegna in giornata"},
+	{"name": "Caffè sospeso", "short": "Caffè", "icon": "sp_caffe", "self": false, "desc": "I tuoi soldati nella zona corrono, picchiano e guariscono. Poi non dormono per tre giorni", "quip": "e ne ha pagato uno anche per voi"},
+	{"name": "Arrivano i cugini", "short": "Cugini", "icon": "sp_cugini", "self": true, "desc": "Cinque parenti dal Nord si presentano gratis al tuo castello più vicino. Restano a cena", "quip": "hanno portato anche le valigie"},
+	{"name": "Il peperoncino", "short": "Piccante", "icon": "sp_peperoncino", "self": false, "desc": "I nemici nella zona scappano urlando in cerca d'acqua", "quip": "«non piccava per niente», dicevano"},
+]
+
+## I poteri che fermano, distraggono, spaventano o comprano i soldati: chi difende il proprio re
+## in pericolo non ci casca (Burocrazia, Apericena, Mazzetta, Scomunica, Peperoncino).
+const DUTY_POWERS := [0, 1, 4, 5, 8]
+
+## Didascalie delle uscite di scena del re, nello stesso ordine di UnitModels.re_scena (0 è il gabinetto).
 const KING_DEATHS := [
 	"%s di %s, sorpreso sul trono. Quello piccolo.",
 	"%s di %s, scoperto nella botte del vino. Era quasi vuota.",
 	"%s di %s, tradito dal trono a molla. Il collaudo era previsto per martedì.",
 	"%s di %s: arriva la moglie, e la guerra finisce lì.",
 	"%s di %s tenta la fuga via acqua. In una tinozza.",
+	"%s di %s, sorpreso in camicia da notte. Il cane di corte non l'ha riconosciuto.",
+	"%s di %s: la mamma ha detto basta guerre per oggi.",
+	"%s di %s, travestito da armatura vuota. Reggeva bene, fino allo starnuto.",
+	"%s di %s consegna la corona. È di cartone: quella vera è al banco dei pegni.",
+	"%s di %s riceve il conto della guerra. Il rotolo è ancora al primo anno.",
 ]
 
 ## Caratteri delle casate: cubetti da 1 a 5, lo stesso totale per tutte (3 = nella media).
@@ -133,7 +156,7 @@ static func stat_mult(team: int, stat: int) -> float:
 	return 1.0 + float(int(HOUSES[team].stats[stat]) - 3) * float(STAT_STEP[stat])
 
 ## Colore delle frasi nei fumetti, per categoria: scuri quanto basta per leggerli sul crema.
-const SAY_COLORS := [Color("b71c1c"), Color("6a1b9a"), Color("37474f"), Color("ad1457"), Color("a84300"), Color("1565c0"), Color("c2185b"), Color("1b6e20"), Color("5e35b1"), Color("5d4037"), Color("c62828"), Color("00695c"), Color("0277bd"), Color("b71c1c"), Color("1b6e20")]
+const SAY_COLORS := [Color("b71c1c"), Color("6a1b9a"), Color("37474f"), Color("ad1457"), Color("a84300"), Color("1565c0"), Color("c2185b"), Color("1b6e20"), Color("5e35b1"), Color("5d4037"), Color("c62828"), Color("00695c"), Color("0277bd"), Color("b71c1c"), Color("1b6e20"), Color("37474f"), Color("1565c0")]
 
 ## Coppie di castelli collegate da strade.
 const ROADS := [[0,1],[0,3],[1,3],[1,2],[1,4],[2,4],[4,5],[3,5],[4,6],[5,6],[5,7],[6,7],[7,8],[8,9],[6,8],[8,12],[9,12]]
@@ -142,9 +165,9 @@ const ROADS := [[0,1],[0,3],[1,3],[1,2],[1,4],[2,4],[4,5],[3,5],[4,6],[5,6],[5,7
 enum { FANTE, BALESTRIERE, CAVALIERE, ARIETE, CATAPULTA, BOMBARDA, FRATE, NONNA, MENESTRELLO, UNIT_TYPES }
 
 const UNITS := [
-	{"name": "Fante", "hp": 45, "dmg": 8, "range": 1.8, "speed": 9.0, "cd": 0.8, "cost": 20, "time": 2.5, "aggro": 16.0, "desc": "Economico, si butta nella mischia"},
+	{"name": "Fante", "hp": 45, "dmg": 8, "range": 1.8, "speed": 9.0, "cd": 0.8, "cost": 20, "time": 2.5, "aggro": 16.0, "desc": "Economico, si butta nella mischia. Con la picca ferma i cavalieri"},
 	{"name": "Balestriere", "hp": 28, "dmg": 6, "range": 20.0, "speed": 8.5, "cd": 1.5, "cost": 35, "time": 3.5, "aggro": 24.0, "desc": "Tira da lontano, ottimo sulle mura"},
-	{"name": "Cavaliere", "hp": 95, "dmg": 16, "range": 2.2, "speed": 16.0, "cd": 1.0, "cost": 45, "time": 5.0, "aggro": 20.0, "desc": "Veloce e letale in campo aperto"},
+	{"name": "Cavaliere", "hp": 95, "dmg": 16, "range": 2.2, "speed": 16.0, "cd": 1.0, "cost": 45, "time": 5.0, "aggro": 20.0, "desc": "Veloce e letale in campo aperto. Teme le picche e le balestre, e nei cortili combina poco"},
 	{"name": "Ariete", "hp": 220, "dmg": 4, "range": 2.5, "speed": 6.5, "cd": 1.6, "cost": 90, "time": 6.0, "aggro": 0.0, "desc": "Sfonda porte e mura da vicino"},
 	{"name": "Catapulta", "hp": 110, "dmg": 30, "range": 45.0, "speed": 6.0, "cd": 5.0, "cost": 120, "time": 8.0, "aggro": 45.0, "desc": "Scaglia massi: le mura crollano"},
 	{"name": "Bombarda", "hp": 85, "dmg": 45, "range": 42.0, "speed": 5.5, "cd": 7.0, "cost": 170, "time": 10.0, "aggro": 42.0, "desc": "Palla di tiro teso, perfora tutto"},
@@ -152,6 +175,12 @@ const UNITS := [
 	{"name": "Nonna", "hp": 140, "dmg": 22, "range": 1.8, "speed": 4.5, "cd": 1.3, "cost": 45, "time": 5.0, "aggro": 14.0, "desc": "Lenta, ma col mattarello non perdona. «Hai mangiato?»"},
 	{"name": "Menestrello", "hp": 30, "dmg": 3, "range": 1.8, "speed": 8.0, "cd": 1.0, "cost": 35, "time": 4.0, "aggro": 8.0, "desc": "Canta malissimo: i nemici vicini combattono peggio"},
 ]
+## Le picche dei fanti fermano la carica: contro i cavalieri fanno tanto di più.
+const PIKE_VS_HORSE := 2.2
+## I dardi delle balestre passano l'armatura: contro i cavalieri fanno di più.
+const BOLT_VS_HORSE := 1.8
+## A cavallo, dentro un cortile, si combina poco: i cavalieri fanno meno danno al re e alle botteghe.
+const HORSE_VS_KING := 0.4
 ## Fede: senza chiesa non arriva. La chiesa dà poco da sola, i frati che le pregano accanto il resto.
 const FAITH_CHURCH := 0.25
 const FAITH_FRIAR := 0.45
@@ -281,7 +310,7 @@ enum { SHOT_STONE, SHOT_BALL, SHOT_METEOR, SHOT_COW }
 
 # ---------------------------------------------------------------- si deve ridere
 ## Fumetti dei soldati, per categoria. Si vedono sopra la testa di chi parla.
-enum { SAY_CARICA, SAY_FERITO, SAY_MORTE, SAY_UBRIACO, SAY_SAGRA, SAY_SCIOPERO, SAY_MAMMA, SAY_SFOTTO, SAY_NONNA, SAY_FRATE, SAY_PANICO, SAY_VITTORIA, SAY_PALIO, SAY_CONTRO, SAY_PER_CAPO }
+enum { SAY_CARICA, SAY_FERITO, SAY_MORTE, SAY_UBRIACO, SAY_SAGRA, SAY_SCIOPERO, SAY_MAMMA, SAY_SFOTTO, SAY_NONNA, SAY_FRATE, SAY_PANICO, SAY_VITTORIA, SAY_PALIO, SAY_CONTRO, SAY_PER_CAPO, SAY_MODULO, SAY_LEALE }
 const SAY := [
 	["All'attaccoooo!", "Per la mamma!", "Ma chi me l'ha fatto fare", "Io vado, eh. Voi venite?", "Dai che è venerdì!", "Ci pensa la fanteria!", "Avanti, Savoia! Ah no, sbagliato", "Prima i balestrieri!", "Tenetemi, che lo meno!"],
 	["Ahia!", "Mamma mia!", "Un medicoooo", "Era solo un graffio. Ora no", "Ho finito i cerotti", "Mi gira la testa", "Questo lo dico al sindacato"],
@@ -298,6 +327,8 @@ const SAY := [
 	["Hiiii!", "Largo, largo!", "Il drappo è mio!", "Dai Morello, dai!", "Chi arriva ultimo paga"],
 	["{n}, apri: è la consegna!", "Dov'è {n}? Gli dobbiamo due parole", "{n}, metti su l'acqua: siamo in cinquanta", "Salutatemi {n}!", "{n}, hai lasciato il portone aperto?", "Ci manda tua zia, {n}", "{n}, si può? Permesso!", "Chi ha votato {n}?", "{n}, conta i merli finché puoi", "Questo è per {n}, con affetto"],
 	["Per {n}! E per la paga!", "{n} ha detto di correre", "Viva {n}, finché paga", "Se perdiamo è colpa di {n}", "{n}, guarda come picchio!", "Lo faccio per {n}. E per il pranzo", "{n} ci guarda: fingete di sapere cosa fate", "Avanti, {n} ha un piano. Forse", "{n} ci ha promesso le ferie", "Agli ordini di {n}, più o meno"],
+	["Manca il timbro", "Serve la marca da bollo", "Dove firmo?", "È il modulo sbagliato", "Torni martedì", "Qui ci vuole la copia rosa"],
+	["Lo spritz dopo, c'è il re da salvare", "Grazie, sono in servizio", "Il re prima di tutto. Poi il tagliere", "Non ora, stiamo difendendo", "Tenetemelo in fresco"],
 ]
 ## Sfottò fra giocatori: tasti 6-0. Il server li manda a tutti.
 const TAUNTS := [

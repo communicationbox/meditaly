@@ -30,6 +30,7 @@ func _ready() -> void:
 		cache["boing"] = _boing()
 		cache["quake"] = _noise_hit(r, 3.2, 0.05, 0.3, 90.0)
 		cache["horn"] = _horn()
+		cache["scream"] = _scream()
 		_load_files()
 
 
@@ -66,6 +67,36 @@ func play(name_: String, at: Vector3, vol_db := 0.0, pitch_var := 0.12) -> void:
 	p.volume_db = vol_db
 	p.pitch_scale = randf_range(1.0 - pitch_var, 1.0 + pitch_var)
 	p.play()
+
+
+## Si sente uguale ovunque sia la telecamera: chi vola via non si allontana dall'orecchio.
+func play_flat(name_: String, vol_db := 0.0) -> void:
+	if not cache.has(name_):
+		return
+	var p := AudioStreamPlayer.new()
+	p.stream = cache[name_]
+	p.volume_db = vol_db
+	add_child(p)
+	p.finished.connect(p.queue_free)
+	p.play()
+
+
+## L'urlo di chi vola: una voce rauca che sale, trema e si perde in lontananza.
+static func _scream() -> AudioStreamWAV:
+	const DUR := 4.8
+	var n := int(DUR * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var k := t / DUR
+		var f := lerpf(330.0, 720.0, minf(k * 2.4, 1.0)) * (1.0 + 0.045 * sin(t * 38.0))
+		phase += f / RATE
+		var saw := fposmod(phase, 1.0) * 2.0 - 1.0
+		var v := 0.45 * saw + 0.3 * sin(phase * TAU * 2.0) + 0.22 * sin(phase * TAU * 3.0)
+		out[i] = v * minf(t * 14.0, 1.0) * pow(1.0 - k, 0.6) * 0.55
+	return _to_stream(out)
 
 
 static func _to_stream(samples: PackedFloat32Array) -> AudioStreamWAV:

@@ -99,6 +99,7 @@ var paused := false
 ## Difficoltà: rendita dell'IA rispetto a un umano e moltiplicatore del suo esercito massimo.
 var ai_income := 0.8
 var ai_cap_mult := 1.0
+var news_read := {}  # casate che hanno già girato pagina
 var news_t := 0.0  # secondi di fermo per il giornale, non si salva
 const NEWS_TIME := 14.0
 const NEWS_ITEMS := 3
@@ -123,6 +124,8 @@ const REPAIR_PER_TICK_ATTACKED := 7
 ## Primi due minuti di tregua: nessuna IA attacca, tutti hanno tempo di prepararsi.
 const TRUCE_TIME := 120.0
 const AI_GUARD := 4
+## Fin dove l'IA guarda che soldati le mandano contro, per scegliere le reclute.
+const AI_HORSE_SEE := 160.0
 const AI_MIN_ARMY := 22
 const AI_DEFEND_MIN := 4
 const AI_HOUSE_GRACE := 120.0
@@ -265,7 +268,8 @@ func cmd_recruit(team: int, cid: int, type: int) -> void:
 		return
 	var c: Dictionary = castles[cid]
 	var d: Dictionary = Defs.UNITS[type]
-	if c.owner != team or houses[team].gold < d.cost:
+	var price: float = float(d.cost) * (0.5 if float(houses[team].get("discount_until", 0.0)) > time else 1.0)
+	if c.owner != team or float(houses[team].gold) < price:
 		return
 	if type == Defs.FRATE and not has_building(team, Defs.B_CHIESA):
 		return
@@ -276,7 +280,7 @@ func cmd_recruit(team: int, cid: int, type: int) -> void:
 		cap = int((Defs.AI_UNIT_CAP + Defs.AI_UNIT_CAP_PER_CASTLE * _castles_of(team)) * ai_cap_mult)
 	if house_unit_count(team) + _queued(team) >= cap:
 		return
-	houses[team].gold -= float(d.cost)
+	houses[team].gold -= price
 	if not stats.is_empty():
 		stats.recruited[type] += 1
 		stats.spent[team] += float(d.cost)
@@ -701,6 +705,227 @@ func _stat(team: int, stat: int) -> float:
 	return 1.0 if equal_houses else Defs.stat_mult(team, stat)
 
 
+# ---------------------------------------------------------------- il potere scemo di ogni casata
+const SPECIAL_CD := 90.0
+const SPECIAL_R := 34.0
+
+
+func _zone_enemies(team: int, p: Vector3) -> Array:
+	var out: Array = []
+	for u: U in ulist:
+		if u.team != team and u.hp > 0.0 and not u.garrison and not at_peace(team, u.team) and u.pos.distance_to(p) < SPECIAL_R:
+			out.append(u)
+	return out
+
+
+## Chi difende il proprio re in pericolo non molla il posto: niente spritz, moduli, fughe o buste.
+## Vale vicino a un castello della sua casata col re colpito da poco o già ferito.
+const DUTY_R := R + 30.0
+
+
+func _king_in_danger(c: Dictionary) -> bool:
+	return float(c.king_calm) > 0.0 or float(c.king_hp) < KING_HP * 0.95
+
+
+func _on_duty(u: U) -> bool:
+	if u.team == Defs.NEUTRAL or u.team >= Defs.HOUSE_COUNT:
+		return false
+	for c: Dictionary in castles:
+		if int(c.owner) == u.team and _king_in_danger(c) and (c.center as Vector3).distance_to(u.pos) < DUTY_R:
+			return true
+	return false
+
+
+## Il re è stato colpito: chi della sua casata era a tavola o scappava lì vicino torna di corsa.
+func _call_to_arms(c: Dictionary) -> void:
+	var ce: Vector3 = c.center
+	for u: U in ulist:
+		if u.team == int(c.owner) and u.hp > 0.0 and (u.feast > 0.0 or u.flee > 0.0) and ce.distance_to(u.pos) < DUTY_R:
+			u.feast = 0.0
+			u.flee = 0.0
+
+
+func _nearest_castle_of(team: int, p: Vector3) -> Dictionary:
+	var best: Dictionary = {}
+	var bd := 1e12
+	for c: Dictionary in castles:
+		if int(c.owner) == team and (c.center as Vector3).distance_squared_to(p) < bd:
+			bd = (c.center as Vector3).distance_squared_to(p)
+			best = c
+	return best
+
+
+## Chi si fa più vedere nella zona; se non c'è nessuno, il padrone del castello più vicino.
+func _excom_target(team: int, p: Vector3) -> int:
+	var per := {}
+	for u: U in _zone_enemies(team, p):
+		if u.team != Defs.NEUTRAL:
+			per[u.team] = int(per.get(u.team, 0)) + 1
+	var best := -1
+	var bn := 0
+	for t: int in per:
+		if int(per[t]) > bn:
+			bn = per[t]
+			best = t
+	if best >= 0:
+		return best
+	var bd := 1e12
+	for c: Dictionary in castles:
+		var o := int(c.owner)
+		if o != team and o != Defs.NEUTRAL and not at_peace(team, o) and (c.center as Vector3).distance_squared_to(p) < bd:
+			bd = (c.center as Vector3).distance_squared_to(p)
+			best = o
+	return best
+
+
+func cmd_special(team: int, p: Vector3) -> bool:
+	if team < 0 or team >= Defs.HOUSE_COUNT or equal_houses:
+		return false
+	var h: Dictionary = houses[team]
+	var left := float(h.get("sp_t", 0.0)) - time
+	if left > 0.0:
+		game.msg_house(team, "Il potere torna fra %d secondi" % ceili(left), UiStyle.MUTED)
+		return false
+	var pw: Dictionary = Defs.HOUSE_POWERS[team]
+	var home := _nearest_castle_of(team, p)
+	if bool(pw.self):
+		if home.is_empty():
+			return false
+		p = home.center
+	elif team != 6 and time < truce_until and _truce_target(team, p):
+		game.msg_house(team, "Tregua: niente scherzi alle altre casate. Usalo sui castelli liberi", UiStyle.DANGER_TEXT)
+		return false
+	var enemies := _zone_enemies(team, p)
+	# i poteri che fermano, distraggono, spaventano o comprano non toccano chi difende il re in pericolo
+	if team in Defs.DUTY_POWERS:
+		var loyal := enemies.filter(func(u: U) -> bool: return _on_duty(u))
+		if not loyal.is_empty():
+			enemies = enemies.filter(func(u: U) -> bool: return not _on_duty(u))
+			game.msg_house(team, "%d soldati difendono il loro re e non mollano il posto" % loyal.size(), UiStyle.MUTED)
+			if rng.randf() < 0.5:
+				_say(loyal[rng.randi() % loyal.size()], Defs.SAY_LEALE, true)
+	match team:
+		0:
+			for u: U in enemies:
+				_stop_unit(u)
+				u.sleep = 12.0
+				if rng.randf() < 0.3:
+					_say(u, Defs.SAY_MODULO, true)
+		1:
+			for u: U in enemies:
+				var ang := rng.randf() * TAU
+				_stop_unit(u)
+				u.feast = 12.0
+				u.feast_pos = p + Vector3(cos(ang), 0, sin(ang)) * rng.randf_range(3.0, 8.0)
+				_take_gold(u.team, team, 8.0)
+		2:
+			for u: U in enemies:
+				_take_gold(u.team, team, 12.0)
+		3:
+			h.discount_until = time + 25.0
+		4:
+			enemies.sort_custom(func(a: U, b: U) -> bool: return a.pos.distance_squared_to(p) < b.pos.distance_squared_to(p))
+			for k in mini(4, enemies.size()):
+				_turn_coat(enemies[k], team)
+		5:
+			var victim := _excom_target(team, p)
+			if victim < 0:
+				game.msg_house(team, "Non c'è nessuno da scomunicare, per ora", UiStyle.MUTED)
+				return false
+			houses[victim].excom_until = time + 30.0
+			for u: U in enemies:
+				if u.team == victim:
+					_stop_unit(u)
+					u.sleep = 6.0
+		6:
+			for u: U in ulist:
+				if u.team == team and u.hp > 0.0 and u.pos.distance_to(p) < SPECIAL_R:
+					u.drunk = 14.0
+					u.hp = minf(u.hp + 25.0, float(Defs.UNITS[u.type].hp))
+		7:
+			var at: Vector3 = (home.gate_out as Vector3) + (home.dir as Vector3) * 12.0
+			for k in 5:
+				var q := at + Vector3(float(k) * 2.0 - 4.0, 0.0, 0.0)
+				q.y = world.top_y(int(q.x), int(q.z))
+				spawn_unit(Defs.FANTE, team, q)
+		8:
+			for u: U in enemies:
+				var away := Vector3(u.pos.x - p.x, 0.0, u.pos.z - p.z)
+				if away.length() < 0.5:
+					away = Vector3(cos(float(u.id)), 0.0, sin(float(u.id)))
+				_stop_unit(u)
+				u.flee = 7.0
+				u.flee_pos = u.pos + away.normalized() * 55.0
+				_hurt(u, 6.0, SRC_POWER)
+				if rng.randf() < 0.3:
+					_say(u, Defs.SAY_PANICO, true)
+	h.sp_t = time + SPECIAL_CD
+	game.fx_all("special", p, float(team))
+	if _concerns_humans(team, p):
+		game.msg_all("%s, %s: %s" % [_hname(team), pw.name, pw.quip], Defs.HOUSES[team].color)
+	return true
+
+
+func _stop_unit(u: U) -> void:
+	u.has_order = false
+	u.goal = -1
+	u.tgt = null
+
+
+func _take_gold(from_t: int, to_t: int, amount: float) -> void:
+	if from_t == Defs.NEUTRAL:
+		houses[to_t].gold = float(houses[to_t].gold) + amount * 0.5  # i Comuni liberi pagano poco e male
+		return
+	var pay := minf(amount, float(houses[from_t].gold))
+	houses[from_t].gold = float(houses[from_t].gold) - pay
+	houses[to_t].gold = float(houses[to_t].gold) + pay
+
+
+func _turn_coat(u: U, team: int) -> void:
+	for o: U in ulist:
+		if o.tgt == u:
+			o.tgt = null
+	_stop_unit(u)
+	u.team = team
+	u.inside_own = -1
+	u.inside_enemy = -1
+	u.feast = 0.0
+	u.flee = 0.0
+	u.sleep = 0.0
+
+
+## Pannello debug: prova il potere di una casata, con i soldati che servono per vederlo.
+func debug_special(house: int, p: Vector3) -> bool:
+	truce_until = minf(truce_until, time)
+	houses[house].sp_t = 0.0
+	var other := (house + 1) % Defs.HOUSE_COUNT
+	for k in 10:
+		for t: int in [other, house]:
+			if t == house and k > 3:
+				continue
+			var q := p + Vector3(float(k % 5) * 2.4 - 5.0, 0.0, float(k / 5) * 2.4 + (-6.0 if t == house else 2.0))
+			q.y = world.top_y(int(q.x), int(q.z))
+			spawn_unit(Defs.FANTE, t, q)
+	return cmd_special(house, p)
+
+
+# ---------------------------------------------------------------- la Gazzetta: si riparte quando tutti hanno letto
+func cmd_news_read(team: int) -> void:
+	if news_t <= 0.0 or team < 0 or team >= Defs.HOUSE_COUNT:
+		return
+	news_read[team] = true
+	var total := 0
+	var done := 0
+	for t in Defs.HOUSE_COUNT:
+		if not bool(houses[t].ai):
+			total += 1
+			if news_read.has(t):
+				done += 1
+	if done >= total:
+		news_t = 0.0
+	game.news_status_all(done, total)
+
+
 func _hurt(u: U, dmg: float, src := SRC_POWER) -> void:
 	if u.shield:
 		dmg *= 0.3
@@ -828,6 +1053,8 @@ func _tick_unit(u: U, dt: float) -> void:
 				if u.cd <= 0.0:
 					u.cd = float(d.cd) * (0.7 if u.drunk > 0.0 else 1.0)
 					var dmg: float = float(d.dmg) * (1.5 if u.drunk > 0.0 else 1.0) * (Defs.BARD_FACTOR if u.sung else 1.0) * _stat(u.team, Defs.STAT_FORZA)
+					if u.type == Defs.FANTE and u.tgt.type == Defs.CAVALIERE:
+						dmg *= Defs.PIKE_VS_HORSE
 					_hurt(u.tgt, dmg, u.type)
 				_settle(u, dt)
 				return
@@ -851,7 +1078,7 @@ func _tick_unit(u: U, dt: float) -> void:
 					u.cd = float(d.cd) * (0.7 if u.drunk > 0.0 else 1.0)
 					if ranged:
 						_arrow(u.pos + Vector3(0, 1.4, 0), aim + Vector3(0, 1.0, 0))
-					_hit_building(bd, u, 1 if ranged else (5 if u.type == Defs.NONNA else 3))
+					_hit_building(bd, u, 1 if ranged else (5 if u.type == Defs.NONNA else (1 if u.type == Defs.CAVALIERE else 3)))
 				_settle(u, dt)
 				return
 			_move_to(u, aim, dt, d, false)
@@ -873,6 +1100,8 @@ func _tick_unit(u: U, dt: float) -> void:
 				if u.cd <= 0.0:
 					u.cd = float(d.cd) * (0.7 if u.drunk > 0.0 else 1.0)
 					var kdmg: float = float(d.dmg) * (1.5 if u.drunk > 0.0 else 1.0) * (Defs.BARD_FACTOR if u.sung else 1.0) * _stat(u.team, Defs.STAT_FORZA)
+					if u.type == Defs.CAVALIERE:
+						kdmg *= Defs.HORSE_VS_KING
 					if ranged:
 						_arrow(u.pos + Vector3(0, 1.4, 0), kp + Vector3(0, 1.0, 0))
 					_hurt_king(kc, kdmg, u.team)
@@ -976,7 +1205,8 @@ func _ranged_attack(u: U, aim: Vector3, d: Dictionary) -> void:
 		var from := u.pos + Vector3(0, 1.6, 0)
 		_arrow(from, aim)
 		if u.tgt != null:
-			_hurt(u.tgt, float(d.dmg) * (1.5 if u.drunk > 0.0 else 1.0) * (Defs.BARD_FACTOR if u.sung else 1.0) * _stat(u.team, Defs.STAT_FORZA), u.type)
+			_hurt(u.tgt, float(d.dmg) * (1.5 if u.drunk > 0.0 else 1.0) * (Defs.BARD_FACTOR if u.sung else 1.0) * _stat(u.team, Defs.STAT_FORZA)
+				* (Defs.BOLT_VS_HORSE if u.tgt.type == Defs.CAVALIERE else 1.0), u.type)
 	elif u.type == Defs.CATAPULTA:
 		var spread := Vector3(rng.randf_range(-1.2, 1.2), rng.randf_range(-0.6, 0.6), rng.randf_range(-1.2, 1.2))
 		_fire_arc(u.pos + Vector3(0, 3.6, 0), aim + spread, Defs.SHOT_STONE, u.team, float(d.dmg) * _stat(u.team, Defs.STAT_FORZA), u.type)
@@ -1968,6 +2198,8 @@ func cmd_shot_auto(c: Dictionary, p: Vector3) -> void:
 func _hurt_king(c: Dictionary, dmg: float, team: int) -> void:
 	if float(c.king_safe) > 0.0 or int(c.owner) == team or at_peace(int(c.owner), team):
 		return
+	if float(c.king_calm) <= 0.0:
+		_call_to_arms(c)
 	c.king_hp = float(c.king_hp) - dmg
 	c.king_calm = KING_CALM
 	c.king_by = team
@@ -2168,6 +2400,58 @@ func _check_winner() -> void:
 
 
 # ---------------------------------------------------------------- IA
+## La recluta dell'IA: r sceglie dalla tabella, r2 decide se adattarsi ai nemici vicini.
+## mix = quote di cavalieri (x) e di fanti (y) tra i soldati nemici a portata dei suoi castelli.
+## Contro un'orda di cavalieri i balestrieri, i cavalieri e i menestrelli lasciano spesso il posto ai
+## fanti con le picche; contro un'orda di fanti i cavalieri, che le picche le temono, fanno lo stesso.
+## Le macchine d'assedio restano: servono per le mura.
+static func ai_pick_unit(r: float, r2: float, mix: Vector2) -> int:
+	var type: int = Defs.FANTE
+	if r > 0.95: type = Defs.MENESTRELLO
+	elif r > 0.90: type = Defs.NONNA
+	elif r > 0.86: type = Defs.CATAPULTA
+	elif r > 0.76: type = Defs.ARIETE
+	elif r > 0.72: type = Defs.BOMBARDA
+	elif r > 0.52: type = Defs.CAVALIERE
+	elif r > 0.30: type = Defs.BALESTRIERE
+	if (type == Defs.BALESTRIERE or type == Defs.CAVALIERE or type == Defs.MENESTRELLO) and r2 < clampf((mix.x - 0.2) * 2.0, 0.0, 0.9):
+		type = Defs.FANTE
+	elif type == Defs.CAVALIERE and r2 < clampf((mix.y - 0.4) * 2.0, 0.0, 0.9):
+		type = Defs.FANTE
+	return type
+
+
+## La prossima recluta della casata t (le prove la sostituiscono per simulare un giocatore).
+func _ai_pick(t: int) -> int:
+	return ai_pick_unit(rng.randf(), rng.randf(), _ai_enemy_mix(t))
+
+
+## Quote di cavalieri (x) e di fanti (y) tra i soldati nemici a portata dei castelli della casata.
+func _ai_enemy_mix(t: int) -> Vector2:
+	var horse := 0
+	var foot := 0
+	var all := 0
+	for u: U in ulist:
+		if u.team == t or u.team == Defs.NEUTRAL or u.hp <= 0.0 or at_peace(t, u.team):
+			continue
+		if u.type == Defs.FRATE or _is_siege(u) or u.type == Defs.ARIETE:
+			continue
+		var near := false
+		for c: Dictionary in castles:
+			if int(c.owner) == t and (c.center as Vector3).distance_squared_to(u.pos) < AI_HORSE_SEE * AI_HORSE_SEE:
+				near = true
+				break
+		if near:
+			all += 1
+			if u.type == Defs.CAVALIERE:
+				horse += 1
+			elif u.type == Defs.FANTE:
+				foot += 1
+	if all < 4:
+		return Vector2.ZERO
+	return Vector2(horse, foot) / float(all)
+
+
 func _ai_tick(t: int, _dt: float) -> void:
 	var h: Dictionary = houses[t]
 	var own: Array = []
@@ -2180,15 +2464,7 @@ func _ai_tick(t: int, _dt: float) -> void:
 	# reclutamento
 	var c0: Dictionary = own[rng.randi() % own.size()]
 	if (c0.queue as Array).size() < 2:
-		var r := rng.randf()
-		var type: int = Defs.FANTE
-		if r > 0.95: type = Defs.MENESTRELLO
-		elif r > 0.90: type = Defs.NONNA
-		elif r > 0.86: type = Defs.CATAPULTA
-		elif r > 0.76: type = Defs.ARIETE
-		elif r > 0.72: type = Defs.BOMBARDA
-		elif r > 0.52: type = Defs.CAVALIERE
-		elif r > 0.30: type = Defs.BALESTRIERE
+		var type := _ai_pick(t)
 		# all'inizio servono soldati: i primi castelli da prendere sono quelli liberi
 		if time < truce_until + AI_HOUSE_GRACE and (type == Defs.ARIETE or type == Defs.CATAPULTA or type == Defs.BOMBARDA):
 			type = Defs.FANTE
@@ -2346,6 +2622,8 @@ func _isolation_factor(c: Dictionary) -> float:
 
 func _ai_power(t: int, p: Vector3, defending: bool) -> void:
 	var h: Dictionary = houses[t]
+	if not equal_houses and float(h.get("sp_t", 0.0)) <= time and rng.randf() < 0.5:
+		cmd_special(t, p)
 	if rng.randf() > 0.1:
 		return
 	var options: Array = [Defs.P_SCUDO, Defs.P_MUCCHE] if defending else [Defs.P_PARMIGIANO, Defs.P_MUCCHE, Defs.P_VINO, Defs.P_TERREMOTO]
@@ -2378,7 +2656,7 @@ func state_array() -> Array:
 		for k in Defs.BUILDING_COUNT:
 			if has_building(hi, k):
 				shops |= 1 << k
-		hs.append([int(h.gold), int(h.faith), cd, h.ai, h.pname, h.alive, snappedf(h.repair_rate, 0.1), shops, snappedf(float(h.faith_rate), 0.01), ceili(maxf(float(taunt_cd[hi]) - time, 0.0)), ceili(maxf(float(h.get("excom_until", 0.0)) - time, 0.0))])
+		hs.append([int(h.gold), int(h.faith), cd, h.ai, h.pname, h.alive, snappedf(h.repair_rate, 0.1), shops, snappedf(float(h.faith_rate), 0.01), ceili(maxf(float(taunt_cd[hi]) - time, 0.0)), ceili(maxf(float(h.get("excom_until", 0.0)) - time, 0.0)), -1 if equal_houses else ceili(maxf(float(h.get("sp_t", 0.0)) - time, 0.0)), 1 if float(h.get("discount_until", 0.0)) > time else 0])
 	var truce: int = ceili(maxf(truce_until - time, 0.0)) if ai_enabled else 0
 	var bs: Array = []
 	for b: Dictionary in buildings:
@@ -3159,6 +3437,7 @@ func _banner(title: String, sub: String, p: Vector3, life := 0.0) -> void:
 	var picks := PackedInt32Array()
 	if life > 0.0:
 		news_t = NEWS_TIME
+		news_read.clear()
 		while picks.size() < NEWS_ITEMS:
 			var k := rng.randi() % News.HEADLINES.size()
 			if not picks.has(k):

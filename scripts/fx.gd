@@ -204,6 +204,8 @@ func event(kind: String, p: Vector3, a: float) -> void:
 	match kind:
 		"say":
 			_say(int(a) / 1000, (int(a) % 1000) / 50, int(a) % 50, p)
+		"special":
+			_special_fx(p, int(a))
 		"say_name":
 			var who := (int(a) / 1000) % 100
 			var named: String = game.hud._display_name(who) if game and game.hud else ""
@@ -587,49 +589,285 @@ func _king_exits(p: Vector3, house: int, variant: int, cid: int) -> void:
 	var ground := func(q: Vector3) -> float:
 		return float(game.world.top_y(int(q.x), int(q.z)))
 	var face := atan2(dir.x, dir.z)
+	# quota addolcita: i gradini dei voxel e il muro del portone facevano saltare la telecamera
+	var height: Array = [ground.call(gate + dir * 3.0)]
+	var smooth := func(q: Vector3) -> float:
+		var want: float = ground.call(q)
+		if want - float(height[0]) < 3.0:
+			height[0] = lerpf(float(height[0]), want, 0.2)
+		return float(height[0])
+	var dur := Controller.exit_time(variant)
+	var side := Vector3(-dir.z, 0.0, dir.x)
+	var extras: Array = []  # figure di contorno da togliere alla fine
+	var extra_fig := func(m: Mesh, sc: float) -> MeshInstance3D:
+		var n := MeshInstance3D.new()
+		n.mesh = m
+		n.material_override = mat
+		add_child(n)
+		n.scale = Vector3.ONE * sc
+		extras.append(n)
+		return n
 	var tw := create_tween()
 	match variant:
-		1:  # la botte rotola fuori dal portone
+		1:  # la botte rotola fuori, si sfascia e lui riparte barcollando
 			sfx.play("boing", gate, 4.0, 0.0)
+			var end_roll := gate + dir * 49.0
 			tw.tween_method(func(t: float) -> void:
-				var q := gate + dir * (t * 42.0 - 4.0)
-				mi.global_position = Vector3(q.x, ground.call(q) + 1.8, q.z)
-				mi.rotation = Vector3(t * 16.0, face, 0.0), 0.0, 1.0, 2.4)
-		2:  # il trono a molla lo spara in cielo
+				var q := gate + dir * (t * 46.0 + 3.0)
+				mi.global_position = Vector3(q.x, smooth.call(q) + 1.8 + absf(sin(t * 12.0)) * 0.9, q.z)
+				mi.rotation = Vector3(t * 20.0, face, 0.0), 0.0, 1.0, dur * 0.6)
+			tw.tween_callback(func() -> void:
+				sfx.play("crash", mi.global_position, 3.0, 0.1)
+				smoke(mi.global_position, 2.0, 12)
+				for k in 14:
+					_spawn_debris(mi.global_position + Vector3(0, 2, 0), Vector3(randf_range(-9, 9), randf_range(7, 15), randf_range(-9, 9)), Color(0.55, 0.34, 0.16), 2.0)
+				mi.mesh = UnitModels.new().re_ubriaco(col)
+				_shout(mi, "Hic!", Color(0.72, 0.16, 0.5)))
+			tw.tween_method(func(t: float) -> void:
+				var q := end_roll + dir * (t * 9.0) + side * sin(t * 9.0) * 3.0
+				mi.global_position = Vector3(q.x, smooth.call(q), q.z)
+				mi.rotation = Vector3(0.0, face + sin(t * 9.0) * 0.7, sin(t * 11.0) * 0.26), 0.0, 1.0, dur * 0.4)
+		2:  # il trono a molla lo spara in cielo; il trono resta sul mastio
+			mi.mesh = UnitModels.new().re_volante(col)
+			var throne := MeshInstance3D.new()
+			throne.mesh = UnitModels.new().re_trono()
+			throne.material_override = mat
+			add_child(throne)
+			throne.global_position = p + Vector3(0, WorldGen.KEEP_H + 2.0, 0)
+			throne.rotation = Vector3(0.0, face, 0.0)
+			throne.scale = Vector3.ONE * 2.2
+			tw.finished.connect(throne.queue_free)
 			sfx.play("boing", p, 8.0, 0.0)
 			sfx.play("horn", p, 0.0, 0.3)
+			if game.ctrl and game.ctrl.cine_castle() == cid:
+				# chi guarda la scena lo segue fin lassù
+				var roof := p + Vector3(0, WorldGen.KEEP_H + 2.0, 0)
+				var top: Vector3 = game.ctrl.sky_king_end()
+				var poses: Array = [UnitModels.new().re_volante(col, 0), UnitModels.new().re_volante(col, 1)]
+				sfx.play_flat("scream", 2.0)
+				var yell := Label3D.new()
+				yell.text = "AAAAAH!"
+				yell.font = UiStyle.comic_font()
+				yell.font_size = 72
+				yell.outline_size = 18
+				yell.pixel_size = 0.00042
+				yell.offset = Vector2(0, 90)  # sopra il re, sullo schermo: a qualunque distanza non lo copre
+				yell.fixed_size = true
+				yell.no_depth_test = true
+				yell.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+				yell.modulate = Color(0.78, 0.1, 0.08)
+				yell.outline_modulate = Color(1, 0.97, 0.88)
+				mi.add_child(yell)
+				tw.tween_method(func(t: float) -> void:
+					mi.global_position = roof.lerp(top, pow(t, 2.2))
+					mi.mesh = poses[int(t * Controller.SKY_TIME * 9.0) % 2]
+					yell.text = "A".repeat(4 + int(t * 5.0)) + "H!"
+					mi.rotation = Vector3(t * 3.0, t * 6.0, sin(t * 11.0) * 0.5), 0.0, 1.0, Controller.SKY_TIME)
+				tw.tween_callback(mi.queue_free)
+				return
 			var far := Vector3(dir.z, 0, -dir.x) * 70.0
 			tw.tween_method(func(t: float) -> void:
 				mi.global_position = p + far * t * t + Vector3(0, WorldGen.KEEP_H + 2.0 + 150.0 * t - 60.0 * t * t, 0)
 				mi.rotation = Vector3(t * 2.0, t * 7.0, sin(t * 9.0) * 0.5), 0.0, 1.0, 2.4)
-		3:  # la moglie se lo porta via per un orecchio
+		3:  # la moglie se lo porta via per un orecchio, e lui saltella
 			sfx.play("voice", gate, 6.0, 0.3)
+			_shout(mi, "Ahi ahi ahi!", Color(0.78, 0.1, 0.08))
 			tw.tween_method(func(t: float) -> void:
-				var q := gate + dir * (t * 34.0 - 4.0)
-				mi.global_position = Vector3(q.x, ground.call(q) + absf(sin(t * 26.0)) * 0.5, q.z)
-				mi.rotation = Vector3(0.0, face, sin(t * 26.0) * 0.08), 0.0, 1.0, 2.4)
-		4:  # la tinozza affonda piano, con dignità
-			var at := gate + dir * 14.0
-			at.y = ground.call(at)
+				var q := gate + dir * (t * 50.0 + 3.0)
+				mi.global_position = Vector3(q.x, smooth.call(q) + absf(sin(t * 34.0)) * 0.7, q.z)
+				mi.rotation = Vector3(0.0, face, sin(t * 34.0) * 0.1), 0.0, 1.0, dur)
+		6:  # la mamma lo insegue col mestolo fino a sparire
+			sfx.play("voice", gate, 6.0, 0.3)
+			mi.mesh = UnitModels.new().re_scena(col, 6, false)
+			var mum: MeshInstance3D = extra_fig.call(UnitModels.new().re_mamma(), 2.2)
+			_shout(mum, "A casa!", Color(0.16, 0.26, 0.6))
+			var mum_h: Array = [ground.call(gate)]
+			tw.tween_method(func(t: float) -> void:
+				var q := gate + dir * (t * 56.0 + 13.0)
+				mi.global_position = Vector3(q.x, smooth.call(q) + absf(sin(t * 44.0)) * 0.6, q.z)
+				mi.rotation = Vector3(0.14, face, sin(t * 44.0) * 0.08)
+				var m := gate + dir * (t * 56.0 + 3.0)
+				mum_h[0] = lerpf(float(mum_h[0]), float(ground.call(m)), 0.2)
+				mum.global_position = Vector3(m.x, float(mum_h[0]) + absf(sin(t * 30.0)) * 0.4, m.z)
+				mum.rotation = Vector3(sin(t * 26.0) * 0.16, face, 0.0), 0.0, 1.0, dur)
+		4:  # rema fuori dal portone lungo un canale, poi la tinozza affonda con dignità
+			mi.mesh = UnitModels.new().re_scena(col, 4, false)
+			var oar := MeshInstance3D.new()
+			oar.mesh = UnitModels.new().re_remo()
+			oar.material_override = mat
+			mi.add_child(oar)
+			oar.position = Vector3(0.0, 1.16, 0.4)
+			# il canale parte dal portone: altezza presa dal punto più alto del percorso
+			const CANAL_LEN := 46.0
+			var water_y := 0.0
+			for k in 6:
+				water_y = maxf(water_y, float(ground.call(gate + dir * (4.0 + k * 8.0))))
 			var pool := MeshInstance3D.new()
 			var box := BoxMesh.new()
-			box.size = Vector3(22.0, 0.12, 22.0)
+			box.size = Vector3(17.0, 0.12, CANAL_LEN)
 			pool.mesh = box
 			var pm := StandardMaterial3D.new()
 			pm.albedo_color = Color(0.25, 0.58, 0.9)
 			pool.material_override = pm
 			add_child(pool)
-			pool.global_position = at + Vector3(0, 0.2, 0)
+			pool.global_position = Vector3(gate.x, water_y + 0.2, gate.z) + dir * (2.0 + CANAL_LEN * 0.5)
+			pool.rotation = Vector3(0.0, face, 0.0)
+			const ROW_END := 0.68  # poi smette di remare e affonda
+			var duration: float = Controller.exit_time(4)
 			tw.tween_method(func(t: float) -> void:
-				var sink := maxf(t - 0.45, 0.0) / 0.55
-				mi.global_position = at + dir * (t * 5.0) + Vector3(0, 0.2 - sink * 3.4 + sin(t * 14.0) * 0.14, 0)
-				mi.rotation = Vector3(sin(t * 11.0) * 0.08, face, sin(t * 8.0) * 0.12), 0.0, 1.0, 2.4)
+				var row := minf(t / ROW_END, 1.0)
+				var sink := maxf(t - ROW_END, 0.0) / (1.0 - ROW_END)
+				var q := gate + dir * (4.0 + row * 34.0)
+				mi.global_position = Vector3(q.x, water_y + 0.2 - sink * sink * 5.0 + sin(t * 26.0) * 0.1, q.z)
+				mi.rotation = Vector3(sin(t * 18.0) * 0.05 + sink * 0.4, face, sin(t * 24.0) * 0.09 + sink * 0.5)
+				var stroke := sin(t * duration * 7.0) if row < 1.0 else 0.0
+				oar.rotation = Vector3(0.0, stroke * 0.55, stroke * 0.28), 0.0, 1.0, duration)
 			tw.tween_callback(pool.queue_free)
+		5:  # giro del castello in camicia da notte, col cane ben staccato dietro: si guarda dall'alto
+			sfx.play("voice", gate, 6.0, 0.3)
+			mi.mesh = UnitModels.new().re_scena(col, 5, false)
+			var pup: MeshInstance3D = extra_fig.call(UnitModels.new().re_cane(), 2.2)
+			var yell_k := _shout(mi, "Aiuto!", Color(0.78, 0.1, 0.08))
+			var yell_d := _shout(pup, "Bau!", Color(0.3, 0.18, 0.08))
+			yell_d.visible = false  # all'uscita sono vicini: le due scritte si accavallerebbero
+			var center: Vector3 = c.center
+			var ring: float = Sim.R + 20.0
+			var a0 := atan2(dir.z, dir.x)
+			var ring_p := center + Vector3(cos(a0), 0.0, sin(a0)) * ring
+			const RUN_OUT := 0.2  # fino a qui corre dritto fuori dal portone
+			const LAPS := 1.3
+			const DOG_LAG := 0.1  # il cane esce dopo e resta ben staccato
+			# dove si trova chi corre, alla frazione s del percorso
+			var along := func(s: float) -> Array:
+				if s < RUN_OUT:
+					return [gate.lerp(ring_p, s / RUN_OUT), dir]
+				var ang := a0 + TAU * LAPS * (s - RUN_OUT) / (1.0 - RUN_OUT)
+				return [center + Vector3(cos(ang), 0.0, sin(ang)) * ring, Vector3(-sin(ang), 0.0, cos(ang))]
+			var place := func(n: Node3D, s: float, hop: float, sc: float) -> void:
+				var r: Array = along.call(s)
+				var q: Vector3 = r[0]
+				var d: Vector3 = r[1]
+				n.global_position = Vector3(q.x, float(ground.call(q)) + hop, q.z)
+				n.rotation = Vector3(0.1, atan2(d.x, d.z), 0.0)
+				n.scale = Vector3.ONE * sc
+			pup.visible = false
+			tw.tween_method(func(t: float) -> void:
+				var sc := lerpf(2.2, 4.2, smoothstep(0.26, 0.5, t))  # dall'alto si devono vedere
+				place.call(mi, t, absf(sin(t * 110.0)) * 0.8, sc)
+				yell_k.scale = Vector3.ONE * (1.6 / sc)  # le figure ingrandite non devono gonfiare le scritte
+				yell_d.scale = Vector3.ONE * (1.6 / sc)
+				yell_d.visible = t >= 0.3
+				pup.visible = t >= DOG_LAG
+				if pup.visible:
+					place.call(pup, t - DOG_LAG, absf(sin(t * 130.0)) * 0.6, sc), 0.0, 1.0, dur)
+		7:  # lo starnuto è già avvenuto nella sala: qui corre fuori in boxer
+			mi.mesh = UnitModels.new().re_boxer()
+			_shout(mi, "Non guardate!", Color(0.78, 0.1, 0.08))
+			tw.tween_method(func(t: float) -> void:
+				var q := gate + dir * (t * 56.0 + 3.0)
+				mi.global_position = Vector3(q.x, smooth.call(q) + absf(sin(t * 36.0)) * 0.7, q.z)
+				mi.rotation = Vector3(0.1, face, sin(t * 36.0) * 0.1), 0.0, 1.0, dur)
+		8:  # senza corona, a testa bassa, con una nuvoletta che piove solo su di lui
+			mi.mesh = UnitModels.new().re_scena(col, 8, false)
+			var cloud: MeshInstance3D = extra_fig.call(UnitModels.new().re_nuvola(), 2.0)
+			var drop_mat := StandardMaterial3D.new()
+			drop_mat.albedo_color = Color(0.45, 0.68, 0.98)
+			drop_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			var drops: Array = []
+			for k in 9:
+				var dr := MeshInstance3D.new()
+				var bx := BoxMesh.new()
+				bx.size = Vector3(0.08, 0.36, 0.08)
+				dr.mesh = bx
+				dr.material_override = drop_mat
+				cloud.add_child(dr)
+				drops.append(dr)
+			_shout(cloud, "Sigh", Color(0.3, 0.3, 0.42))
+			tw.tween_method(func(t: float) -> void:
+				var q := gate + dir * (t * 19.0 + 3.0)
+				var y: float = smooth.call(q)
+				mi.global_position = Vector3(q.x, y + absf(sin(t * 18.0)) * 0.14, q.z)
+				mi.rotation = Vector3(0.26, face, sin(t * 18.0) * 0.03)
+				cloud.global_position = Vector3(q.x, y + 9.5, q.z)
+				for k in drops.size():
+					var ph := fposmod(t * dur * 2.6 + float(k) * 0.37, 1.0)
+					(drops[k] as Node3D).position = Vector3(-0.9 + float(k) * 0.22, -ph * 3.4, sin(float(k) * 2.1) * 0.34), 0.0, 1.0, dur)
+		9:  # il rotolo del conto si srotola a perdita d'occhio e lui sviene
+			var at := gate + dir * 10.0
+			at.y = ground.call(at)
+			mi.mesh = UnitModels.new().re_scena(col, 9, false)
+			mi.global_position = at
+			mi.rotation = Vector3(0.0, face, 0.0)
+			var clerk: MeshInstance3D = extra_fig.call(UnitModels.new().re_ragioniere(), 2.2)
+			clerk.global_position = at + side * 4.0
+			clerk.rotation = Vector3(0.0, face, 0.0)
+			_shout(clerk, "Questo è solo gennaio", Color(0.16, 0.16, 0.22))
+			var paper := MeshInstance3D.new()
+			var pbox := BoxMesh.new()
+			pbox.size = Vector3(2.4, 0.08, 1.0)
+			paper.mesh = pbox
+			var pm2 := StandardMaterial3D.new()
+			pm2.albedo_color = Color(0.95, 0.9, 0.74)
+			paper.material_override = pm2
+			add_child(paper)
+			extras.append(paper)
+			paper.rotation = Vector3(0.0, face, 0.0)
+			var from := at + side * 2.0 + dir * 2.0 + Vector3(0, 0.4, 0)
+			tw.tween_method(func(t: float) -> void:
+				var l := 2.0 + 96.0 * minf(t / 0.62, 1.0)
+				paper.scale.z = l
+				paper.global_position = from + dir * (l * 0.5)
+				mi.rotation = Vector3(-smoothstep(0.62, 0.78, t) * PI * 0.5, face, 0.0), 0.0, 1.0, dur)
 	tw.tween_callback(func() -> void:
 		smoke(mi.global_position, 2.0, 10)
-		mi.queue_free())
+		mi.queue_free()
+		for n: Node in extras:
+			if is_instance_valid(n):
+				n.queue_free())
 
 
+
+
+## Il nome del potere che sale dal punto colpito.
+func _special_fx(p: Vector3, house: int) -> void:
+	sfx.play("boing", p, 5.0, 0.1)
+	smoke(p + Vector3(0, 2, 0), 2.0, 10)
+	var l := Label3D.new()
+	l.text = String(Defs.HOUSE_POWERS[clampi(house, 0, Defs.HOUSE_POWERS.size() - 1)].name) + "!"
+	l.font = UiStyle.comic_font()
+	l.font_size = 72
+	l.outline_size = 18
+	l.pixel_size = 0.0006
+	l.fixed_size = true
+	l.no_depth_test = true
+	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	l.modulate = Defs.HOUSES[clampi(house, 0, Defs.HOUSES.size() - 1)].color.lerp(Color.BLACK, 0.2)
+	l.outline_modulate = Color(1, 0.97, 0.88)
+	add_child(l)
+	l.global_position = p + Vector3(0, 8, 0)
+	var tw := create_tween()
+	tw.tween_property(l, "global_position", p + Vector3(0, 22, 0), 2.6)
+	tw.parallel().tween_property(l, "modulate:a", 0.0, 0.8).set_delay(1.8)
+	tw.parallel().tween_property(l, "outline_modulate:a", 0.0, 0.8).set_delay(1.8)
+	tw.tween_callback(l.queue_free)
+
+
+## Scritta che resta sopra una figura, a qualunque distanza si guardi.
+func _shout(n: Node3D, text: String, col: Color) -> Label3D:
+	var l := Label3D.new()
+	l.text = text
+	l.font = UiStyle.comic_font()
+	l.font_size = 72
+	l.outline_size = 18
+	l.pixel_size = 0.00042
+	l.position = Vector3(0, 3.4, 0)  # sopra la testa
+	l.fixed_size = true
+	l.no_depth_test = true
+	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	l.modulate = col
+	l.outline_modulate = Color(1, 0.97, 0.88)
+	n.add_child(l)
+	return l
 
 
 ## Il re ucciso schizza fuori dal tetto del mastio, gabinetto compreso, girando su se stesso.

@@ -93,6 +93,18 @@ func drag_power(a: Vector2, b: Vector2) -> void:
 	await wait_frames(3)
 
 
+## Il tasto meno come arriva da una tastiera italiana: il carattere è «-», il tasto fisico no.
+func key_it_minus() -> void:
+	for pressed: bool in [true, false]:
+		var e := InputEventKey.new()
+		e.physical_keycode = KEY_SLASH
+		e.keycode = KEY_MINUS
+		e.unicode = 45
+		e.pressed = pressed
+		Input.parse_input_event(e)
+		await wait_frames(2)
+
+
 func key(k: Key) -> void:
 	for pressed: bool in [true, false]:
 		var e := InputEventKey.new()
@@ -105,6 +117,8 @@ func key(k: Key) -> void:
 
 func _run() -> void:
 	out = OS.get_cmdline_user_args()[0]
+	# sempre davanti: macOS non ridisegna una finestra coperta, e il test aspetterebbe per sempre
+	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_ALWAYS_ON_TOP, true)
 	var main: Node = (load("res://scenes/main.tscn") as PackedScene).instantiate()
 	root.add_child(main)
 	await wait_frames(5)
@@ -248,11 +262,11 @@ func _run() -> void:
 	check("pulsante potere arma la mira", c.pending.get("id", -1) == Defs.P_SCUDO)
 	await click(Vector2(800, 300), MOUSE_BUTTON_RIGHT)
 	check("clic destro annulla la mira", c.pending.is_empty())
-	await key(KEY_MINUS)
+	await key_it_minus()
 	await wait_frames(3)
 	check("il tasto - apre il debug", hud.debug_panel != null and hud.debug_panel.visible)
 	await shot("ui_debug")
-	await key(KEY_MINUS)
+	await key_it_minus()
 	# evento: dopo il titolo resta un'icona che porta sul posto, e sparisce quando finisce
 	check("l'evento parte", sim._run_event(3))
 	await wait_frames(3)
@@ -270,6 +284,13 @@ func _run() -> void:
 	hud.event_icons[0].t = 0.05
 	await wait_s(0.3)
 	check("finito l'evento l'icona sparisce", hud.event_icons.is_empty())
+	check("la casata ha il suo potere nella barra", hud.special_btn.visible and hud.special_name.text == "Mazzetta")
+	await key(KEY_X)
+	await wait_frames(2)
+	check("X arma il potere della casata", c.pending.get("kind", "") == "special")
+	await shot("ui_potere")
+	await click(Vector2(800, 300), MOUSE_BUTTON_RIGHT)
+	check("clic destro annulla il potere", c.pending.is_empty())
 	# difese da tastiera sul castello
 	await key(KEY_SPACE)
 	c.selected_castle = 5

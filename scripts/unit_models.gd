@@ -250,15 +250,15 @@ func re(robe := WHITE, team := true) -> ArrayMesh:
 	# sedile ad anello col bordo scuro, coperchio alzato bianco dietro la schiena
 	_b(Vector3(-0.2, 0.0, -0.15), Vector3(0.2, 0.08, 0.4), por2)
 	_b(Vector3(-0.17, 0.08, -0.12), Vector3(0.17, 0.3, 0.32), por)
-	_b(Vector3(-0.36, 0.3, -0.3), Vector3(0.36, 0.42, 0.62), por2)
+	_b(Vector3(-0.36, 0.3, -0.3), Vector3(0.36, 0.42, 0.5), por2)
 	# vaso e sedile a gradini: visti dall'alto fanno l'ovale tipico, non un tavolo
-	for st_: Array in [[0.5, -0.36, 0.42], [0.42, 0.42, 0.64], [0.28, 0.64, 0.8]]:
+	for st_: Array in [[0.5, -0.36, 0.3], [0.42, 0.3, 0.46], [0.28, 0.46, 0.56]]:  # finisce prima delle gambe
 		var hw: float = st_[0]
 		_b(Vector3(-hw, 0.42, st_[1]), Vector3(hw, 0.56, st_[2]), por)
 		_b(Vector3(-hw - 0.06, 0.56, float(st_[1]) - 0.04), Vector3(hw + 0.06, 0.6, float(st_[2]) + 0.06), Color(0.25, 0.22, 0.2))
 		_b(Vector3(-hw - 0.05, 0.6, float(st_[1]) - 0.03), Vector3(hw + 0.05, 0.66, float(st_[2]) + 0.05), seat)
 	# l'acqua azzurra che si vede ai lati delle cosce
-	_b(Vector3(-0.42, 0.66, 0.16), Vector3(0.42, 0.675, 0.6), Color(0.3, 0.62, 0.9))
+	_b(Vector3(-0.42, 0.66, 0.16), Vector3(0.42, 0.675, 0.42), Color(0.3, 0.62, 0.9))
 	# coperchio alzato: ovale, bianco, più largo del re, con le cerniere
 	_b(Vector3(-0.6, 0.68, -0.48), Vector3(0.6, 1.4, -0.4), seat)
 	_b(Vector3(-0.44, 1.4, -0.48), Vector3(0.44, 1.62, -0.4), seat)
@@ -274,13 +274,13 @@ func re(robe := WHITE, team := true) -> ArrayMesh:
 	_b(Vector3(0.66, 0.68, -0.14), Vector3(0.86, 0.86, 0.1), WHITE)
 	_b(Vector3(0.7, 0.3, 0.08), Vector3(0.82, 0.72, 0.1), WHITE)
 	# cosce nude (i calzoni sono calati), calzoni ammucchiati alle caviglie, pantofole
-	_b(Vector3(-0.27, 0.62, 0.0), Vector3(-0.03, 0.82, 0.78), SKIN)
-	_b(Vector3(0.03, 0.62, 0.0), Vector3(0.27, 0.82, 0.78), SKIN)
-	_b(Vector3(-0.26, 0.12, 0.6), Vector3(-0.04, 0.66, 0.8), SKIN)
-	_b(Vector3(0.04, 0.12, 0.6), Vector3(0.26, 0.66, 0.8), SKIN)
-	_b(Vector3(-0.34, 0.0, 0.52), Vector3(0.34, 0.26, 0.9), robe * 0.7, 0, 0, team)
-	_b(Vector3(-0.3, 0.0, 0.82), Vector3(-0.02, 0.12, 1.08), Color(0.6, 0.1, 0.12))
-	_b(Vector3(0.02, 0.0, 0.82), Vector3(0.3, 0.12, 1.08), Color(0.6, 0.1, 0.12))
+	_b(Vector3(-0.27, 0.68, 0.0), Vector3(-0.03, 0.9, 0.86), SKIN)
+	_b(Vector3(0.03, 0.68, 0.0), Vector3(0.27, 0.9, 0.86), SKIN)
+	_b(Vector3(-0.26, 0.12, 0.64), Vector3(-0.04, 0.72, 0.86), SKIN)
+	_b(Vector3(0.04, 0.12, 0.64), Vector3(0.26, 0.72, 0.86), SKIN)
+	_b(Vector3(-0.34, 0.0, 0.6), Vector3(0.34, 0.26, 0.98), robe * 0.7, 0, 0, team)
+	_b(Vector3(-0.3, 0.0, 0.92), Vector3(-0.02, 0.12, 1.18), Color(0.6, 0.1, 0.12))
+	_b(Vector3(0.02, 0.0, 0.92), Vector3(0.3, 0.12, 1.18), Color(0.6, 0.1, 0.12))
 	# veste reale con bordo d'ermellino
 	_b(Vector3(-0.34, 0.62, -0.3), Vector3(0.34, 1.35, 0.14), robe, 0, 0, team)
 	_b(Vector3(-0.36, 1.2, -0.24), Vector3(0.36, 1.36, 0.22), WHITE)
@@ -326,19 +326,219 @@ func frate() -> ArrayMesh:
 
 ## Nonna: vestito nero, scialle della casata, crocchia bianca, occhiali, mattarello.
 ## Busto del re a partire da quota y: veste, ermellino, testa, barba, naso e corona.
-func _busto(robe: Color, x: float, y: float) -> void:
+## Braccia lungo i fianchi: 1 sinistro, 2 destro, 3 entrambi (0 se la scena gliele dà a modo suo).
+func _busto(robe: Color, x: float, y: float, crown := true, arms := 3) -> void:
+	for side: int in [1, 2]:
+		if arms & side:
+			var sx := -1.0 if side == 1 else 1.0
+			var x0 := x + sx * 0.34
+			var x1 := x + sx * 0.52
+			_b(Vector3(minf(x0, x1), y + 0.14, -0.1), Vector3(maxf(x0, x1), y + 0.64, 0.1), robe * 0.9)
+			_b(Vector3(minf(x0, x1), y, -0.09), Vector3(maxf(x0, x1), y + 0.14, 0.09), SKIN)
 	_b(Vector3(x - 0.34, y, -0.2), Vector3(x + 0.34, y + 0.72, 0.2), robe)
 	_b(Vector3(x - 0.36, y + 0.58, -0.24), Vector3(x + 0.36, y + 0.74, 0.24), WHITE)
 	_b(Vector3(x - 0.2, y + 0.74, -0.18), Vector3(x + 0.2, y + 1.12, 0.18), SKIN)
 	_b(Vector3(x - 0.21, y + 0.68, 0.1), Vector3(x + 0.21, y + 0.9, 0.24), Color(0.92, 0.92, 0.9))
 	_b(Vector3(x - 0.05, y + 0.88, 0.18), Vector3(x + 0.05, y + 0.98, 0.27), Color(0.9, 0.55, 0.5))
+	if not crown:
+		return
 	_b(Vector3(x - 0.22, y + 1.12, -0.2), Vector3(x + 0.22, y + 1.24, 0.2), GOLD)
 	for k: Vector2 in [Vector2(-0.18, -0.16), Vector2(0.14, -0.16), Vector2(-0.18, 0.12), Vector2(0.14, 0.12)]:
 		_b(Vector3(x + k.x, y + 1.24, k.y), Vector3(x + k.x + 0.05, y + 1.38, k.y + 0.05), GOLD)
 
 
-## Le uscite di scena del re, oltre al gabinetto: 1 botte, 2 trono a molla, 3 regina, 4 tinozza.
-func re_scena(robe: Color, v: int) -> ArrayMesh:
+func _trono() -> void:
+	_b(Vector3(-0.7, 0.0, -0.7), Vector3(0.7, 0.14, 0.7), WOODC)
+	for k in 4:
+		var w := 0.5 if k % 2 == 0 else 0.36
+		_b(Vector3(-w, 0.14 + k * 0.14, -w), Vector3(w, 0.25 + k * 0.14, w), Color(0.82, 0.68, 0.3))
+	_b(Vector3(-0.62, 0.7, -0.56), Vector3(0.62, 0.86, 0.66), Color(0.62, 0.08, 0.1))
+	_b(Vector3(-0.62, 0.86, -0.62), Vector3(0.62, 2.3, -0.44), Color(0.62, 0.08, 0.1))
+	_b(Vector3(-0.7, 2.3, -0.66), Vector3(0.7, 2.44, -0.4), GOLD)
+
+
+## Il trono a molla da solo: resta sul mastio mentre il re vola via.
+func re_trono() -> ArrayMesh:
+	_begin(1.2)
+	_trono()
+	return st.commit()
+
+
+## Il re sparato in cielo: braccia e gambe all'aria, bocca spalancata. Due pose da alternare.
+func re_volante(robe: Color, pose := 0) -> ArrayMesh:
+	_begin(1.2)
+	var legs := robe * 0.8
+	var kick := 0.26 if pose == 0 else -0.26
+	_b(Vector3(-0.42, -0.5 + kick, -0.14), Vector3(-0.18, 0.1, 0.14), legs)
+	_b(Vector3(0.18, -0.5 - kick, -0.14), Vector3(0.42, 0.1, 0.14), legs)
+	_busto(robe, 0.0, 0.0, true, 0)
+	_b(Vector3(-0.12, 0.8, 0.22), Vector3(0.12, 1.0, 0.27), Color(0.24, 0.05, 0.05))
+	var wave := 0.3 if pose == 0 else -0.3
+	_b(Vector3(-0.92, 0.5 + wave, -0.1), Vector3(-0.34, 0.68 + wave, 0.1), robe)
+	_b(Vector3(-1.1, 0.46 + wave, -0.12), Vector3(-0.9, 0.72 + wave, 0.12), SKIN)
+	_b(Vector3(0.34, 0.5 - wave, -0.1), Vector3(0.92, 0.68 - wave, 0.1), robe)
+	_b(Vector3(0.9, 0.46 - wave, -0.12), Vector3(1.1, 0.72 - wave, 0.12), SKIN)
+	return st.commit()
+
+
+## Gambe del re in piedi, a partire dal pavimento.
+func _gambe(col: Color, x: float, h := 0.72) -> void:
+	_b(Vector3(x - 0.3, 0.0, -0.14), Vector3(x - 0.06, h, 0.14), col)
+	_b(Vector3(x + 0.06, 0.0, -0.14), Vector3(x + 0.3, h, 0.14), col)
+
+
+func _cane(o: Vector3) -> void:
+	var dog := Color(0.52, 0.32, 0.16)
+	_b(o + Vector3(-0.3, 0.26, -0.5), o + Vector3(0.3, 0.68, 0.5), dog)
+	_b(o + Vector3(-0.24, 0.42, 0.46), o + Vector3(0.24, 0.92, 0.92), dog)
+	_b(o + Vector3(-0.14, 0.42, 0.9), o + Vector3(0.14, 0.64, 1.14), Color(0.2, 0.13, 0.08))
+	_b(o + Vector3(-0.3, 0.86, 0.5), o + Vector3(-0.2, 1.06, 0.64), Color(0.34, 0.2, 0.1))
+	_b(o + Vector3(0.2, 0.86, 0.5), o + Vector3(0.3, 1.06, 0.64), Color(0.34, 0.2, 0.1))
+	_b(o + Vector3(-0.06, 0.6, -0.8), o + Vector3(0.06, 0.74, -0.46), dog)
+	for q: Vector2 in [Vector2(-0.26, -0.4), Vector2(0.12, -0.4), Vector2(-0.26, 0.3), Vector2(0.12, 0.3)]:
+		_b(o + Vector3(q.x, 0.0, q.y), o + Vector3(q.x + 0.14, 0.28, q.y + 0.14), dog)
+
+
+func re_cane() -> ArrayMesh:
+	_begin(1.2)
+	_cane(Vector3.ZERO)
+	return st.commit()
+
+
+func _mamma(o: Vector3) -> void:
+	var dress2 := Color(0.2, 0.26, 0.42)
+	_b(o + Vector3(0.1, 0.0, -0.5), o + Vector3(1.2, 0.8, 0.5), dress2)
+	_b(o + Vector3(0.24, 0.8, -0.36), o + Vector3(1.06, 1.6, 0.36), dress2)
+	_b(o + Vector3(0.3, 0.02, 0.48), o + Vector3(1.0, 1.4, 0.54), WHITE)
+	_b(o + Vector3(0.44, 1.6, -0.22), o + Vector3(0.86, 2.04, 0.22), SKIN)
+	_b(o + Vector3(0.4, 1.9, -0.28), o + Vector3(0.9, 2.12, 0.1), Color(0.62, 0.62, 0.64))
+	_b(o + Vector3(0.52, 2.12, -0.24), o + Vector3(0.78, 2.32, 0.02), Color(0.62, 0.62, 0.64))
+	_b(o + Vector3(1.04, 1.4, -0.08), o + Vector3(1.5, 1.56, 0.08), dress2)
+	_b(o + Vector3(1.42, 1.4, -0.04), o + Vector3(1.52, 2.5, 0.04), WOODC)
+	_b(o + Vector3(1.32, 2.5, -0.16), o + Vector3(1.62, 2.78, 0.16), WOODC)
+
+
+func re_mamma() -> ArrayMesh:
+	_begin(1.2)
+	_mamma(Vector3(-0.65, 0.0, 0.0))
+	return st.commit()
+
+
+## Il re uscito dalla botte: in piedi, naso rosso, corona storta, boccale in mano.
+func re_ubriaco(robe: Color) -> ArrayMesh:
+	_begin(1.2)
+	_gambe(robe * 0.7, 0.0)
+	_busto(robe, 0.0, 0.72, false, 1)
+	var red := Color(0.86, 0.2, 0.18)
+	_b(Vector3(-0.09, 1.57, 0.18), Vector3(0.09, 1.72, 0.32), red)
+	_b(Vector3(-0.2, 1.59, 0.16), Vector3(-0.11, 1.69, 0.19), red)
+	_b(Vector3(0.11, 1.59, 0.16), Vector3(0.2, 1.69, 0.19), red)
+	_b(Vector3(-0.16, 1.84, -0.2), Vector3(0.08, 1.94, 0.2), GOLD)
+	_b(Vector3(0.08, 1.89, -0.2), Vector3(0.36, 2.01, 0.2), GOLD)
+	_b(Vector3(0.34, 1.2, 0.0), Vector3(0.66, 1.36, 0.18), robe)
+	_b(Vector3(0.58, 1.3, -0.02), Vector3(0.94, 1.72, 0.26), WOODC)
+	_b(Vector3(0.58, 1.72, -0.02), Vector3(0.94, 1.84, 0.26), WHITE)
+	return st.commit()
+
+
+## Mezza corona, destra o sinistra: d'oro finché regge l'inganno, poi cartone strappato.
+func re_corona_meta(gold: bool, left: bool) -> ArrayMesh:
+	_begin(1.2)
+	var main := GOLD if gold else Color(0.66, 0.5, 0.3)
+	var edge := Color(0.8, 0.58, 0.14) if gold else Color(0.44, 0.32, 0.18)
+	var sx := -1.0 if left else 1.0
+	var box := func(x0: float, y0: float, z0: float, x1: float, y1: float, z1: float, c: Color) -> void:
+		var a0 := sx * x0
+		var a1 := sx * x1
+		_b(Vector3(minf(a0, a1), y0, z0), Vector3(maxf(a0, a1), y1, z1), c)
+	box.call(0.0, 0.0, -0.3, 0.46, 0.26, 0.3, main)
+	box.call(0.0, 0.0, -0.31, 0.47, 0.06, 0.31, edge)
+	for x: float in [0.08, 0.36]:
+		box.call(x, 0.26, -0.24, x + 0.12, 0.56, 0.24, main)
+	if gold:
+		box.call(0.2, 0.08, 0.3, 0.3, 0.18, 0.33, Color(0.8, 0.12, 0.14))
+	else:  # il bordo strappato, a dentini
+		for k in 3:
+			box.call(-0.06 if k % 2 == 0 else 0.0, 0.06 + k * 0.08, -0.3, 0.02, 0.12 + k * 0.08, 0.3, Color(0.82, 0.72, 0.56))
+	return st.commit()
+
+
+## La nuvoletta personale di chi ha appena perso tutto.
+func re_nuvola() -> ArrayMesh:
+	_begin(1.2)
+	var gray := Color(0.5, 0.52, 0.58)
+	var gray2 := Color(0.62, 0.64, 0.7)
+	_b(Vector3(-1.0, 0.0, -0.5), Vector3(1.0, 0.5, 0.5), gray)
+	_b(Vector3(-0.66, 0.5, -0.4), Vector3(0.3, 0.92, 0.4), gray2)
+	_b(Vector3(0.1, 0.5, -0.34), Vector3(0.74, 0.76, 0.34), gray2)
+	return st.commit()
+
+
+func re_ragioniere() -> ArrayMesh:
+	_begin(1.2)
+	var clerk := Color(0.28, 0.28, 0.32)
+	_b(Vector3(-0.3, 0.0, -0.14), Vector3(0.3, 0.8, 0.14), clerk)
+	_b(Vector3(-0.32, 0.8, -0.2), Vector3(0.32, 1.4, 0.2), clerk)
+	_b(Vector3(-0.18, 1.4, -0.16), Vector3(0.18, 1.74, 0.16), SKIN)
+	_b(Vector3(-0.22, 1.74, -0.2), Vector3(0.22, 1.86, 0.2), clerk)
+	return st.commit()
+
+
+func _armatura(x: float) -> void:
+	var plate := Color(0.66, 0.68, 0.72)
+	var plate2 := Color(0.44, 0.46, 0.5)
+	_gambe(plate2, x)
+	_b(Vector3(x - 0.4, 0.72, -0.24), Vector3(x + 0.4, 1.5, 0.24), plate)
+	_b(Vector3(x - 0.54, 0.86, -0.12), Vector3(x - 0.4, 1.46, 0.12), plate2)
+	_b(Vector3(x + 0.4, 0.86, -0.12), Vector3(x + 0.54, 1.46, 0.12), plate2)
+	_b(Vector3(x - 0.26, 1.5, -0.24), Vector3(x + 0.26, 2.1, 0.24), plate)
+	_b(Vector3(x - 0.2, 1.74, 0.24), Vector3(x + 0.2, 1.88, 0.26), Color(0.14, 0.12, 0.12))
+	_b(Vector3(x - 0.06, 2.1, -0.08), Vector3(x + 0.06, 2.5, 0.08), Color(0.7, 0.14, 0.14))
+	_b(Vector3(x + 0.62, 0.0, 0.0), Vector3(x + 0.72, 2.6, 0.1), WOODC)
+	_b(Vector3(x + 0.52, 2.6, -0.04), Vector3(x + 0.82, 3.0, 0.14), plate)
+
+
+func re_armatura() -> ArrayMesh:
+	_begin(1.2)
+	_armatura(0.0)
+	return st.commit()
+
+
+## Il re rimasto senza armatura: corona, barba e boxer a pallini rossi.
+func re_boxer() -> ArrayMesh:
+	_begin(1.2)
+	_gambe(SKIN, 0.0, 0.5)
+	var cloth := Color(0.98, 0.97, 0.93)
+	var dot := Color(0.84, 0.12, 0.12)
+	_b(Vector3(-0.36, 0.42, -0.22), Vector3(0.36, 0.88, 0.22), cloth)
+	for q: Vector2 in [Vector2(-0.26, 0.76), Vector2(-0.04, 0.54), Vector2(0.18, 0.74), Vector2(-0.2, 0.5), Vector2(0.22, 0.5), Vector2(0.0, 0.8)]:
+		_b(Vector3(q.x, q.y, 0.22), Vector3(q.x + 0.09, q.y + 0.09, 0.235), dot)
+		_b(Vector3(q.x, q.y, -0.235), Vector3(q.x + 0.09, q.y + 0.09, -0.22), dot)
+	_b(Vector3(-0.32, 0.88, -0.18), Vector3(0.32, 1.46, 0.18), SKIN)
+	for sx: float in [-0.5, 0.32]:
+		_b(Vector3(sx, 0.86, -0.09), Vector3(sx + 0.18, 1.44, 0.09), SKIN)
+	_b(Vector3(-0.2, 1.46, -0.18), Vector3(0.2, 1.84, 0.18), SKIN)
+	_b(Vector3(-0.21, 1.4, 0.1), Vector3(0.21, 1.62, 0.24), Color(0.92, 0.92, 0.9))
+	_b(Vector3(-0.05, 1.6, 0.18), Vector3(0.05, 1.7, 0.27), Color(0.9, 0.55, 0.5))
+	_b(Vector3(-0.22, 1.84, -0.2), Vector3(0.22, 1.96, 0.2), GOLD)
+	for k: Vector2 in [Vector2(-0.18, -0.16), Vector2(0.14, -0.16), Vector2(-0.18, 0.12), Vector2(0.14, 0.12)]:
+		_b(Vector3(k.x, 1.96, k.y), Vector3(k.x + 0.05, 2.1, k.y + 0.05), GOLD)
+	return st.commit()
+
+
+## L'armatura dopo lo starnuto: un mucchio di ferraglia.
+func re_crollo() -> ArrayMesh:
+	_begin(1.2)
+	var iron := Color(0.62, 0.64, 0.68)
+	var iron2 := Color(0.42, 0.44, 0.48)
+	for k: Array in [[-0.9, 0.4], [0.7, 0.5], [-0.5, -0.5], [0.4, -0.6], [1.0, -0.2]]:
+		_b(Vector3(float(k[0]) - 0.28, 0.0, float(k[1]) - 0.22), Vector3(float(k[0]) + 0.28, 0.3, float(k[1]) + 0.22), iron if int(k[0] * 10.0) % 2 == 0 else iron2)
+	return st.commit()
+
+
+## Le uscite di scena del re, oltre al gabinetto: 1 botte, 2 trono a molla, 3 regina, 4 tinozza,
+## 5 camicia da notte, 6 mamma, 7 armatura, 8 corona di cartone, 9 il conto.
+func re_scena(robe: Color, v: int, extra := true) -> ArrayMesh:
 	_begin(1.2)
 	var iron := Color(0.36, 0.34, 0.33)
 	var dark := Color(0.3, 0.19, 0.1)
@@ -349,33 +549,82 @@ func re_scena(robe: Color, v: int) -> ArrayMesh:
 			for y: float in [0.28, 1.3]:
 				_b(Vector3(-0.64, y, -0.64), Vector3(0.64, y + 0.08, 0.64), iron)
 			_b(Vector3(-0.42, 1.6, -0.42), Vector3(0.42, 1.63, 0.42), dark)
-			_busto(robe, 0.0, 1.05)
+			_busto(robe, 0.0, 1.05, false, 0)
+			# ubriaco: naso e guance rossi, corona di traverso, boccale in mano
+			var red := Color(0.86, 0.2, 0.18)
+			_b(Vector3(-0.09, 1.9, 0.18), Vector3(0.09, 2.05, 0.32), red)
+			_b(Vector3(-0.2, 1.92, 0.16), Vector3(-0.11, 2.02, 0.19), red)
+			_b(Vector3(0.11, 1.92, 0.16), Vector3(0.2, 2.02, 0.19), red)
+			_b(Vector3(-0.16, 2.17, -0.2), Vector3(0.08, 2.27, 0.2), GOLD)
+			_b(Vector3(0.08, 2.22, -0.2), Vector3(0.36, 2.34, 0.2), GOLD)
+			for k: Vector2 in [Vector2(-0.12, 2.27), Vector2(0.02, 2.27), Vector2(0.14, 2.34), Vector2(0.28, 2.34)]:
+				_b(Vector3(k.x, k.y, -0.04), Vector3(k.x + 0.06, k.y + 0.14, 0.04), GOLD)
 			_b(Vector3(-0.52, 1.56, 0.34), Vector3(-0.32, 1.7, 0.56), SKIN)
-			_b(Vector3(0.32, 1.56, 0.34), Vector3(0.52, 1.7, 0.56), SKIN)
+			_b(Vector3(0.32, 1.5, 0.1), Vector3(0.62, 1.66, 0.3), robe)
+			_b(Vector3(0.56, 1.62, 0.08), Vector3(0.76, 1.8, 0.32), SKIN)
+			_b(Vector3(0.58, 1.8, 0.06), Vector3(0.94, 2.24, 0.34), WOODC)
+			_b(Vector3(0.54, 1.96, 0.04), Vector3(0.98, 2.02, 0.36), iron)
+			_b(Vector3(0.58, 2.24, 0.06), Vector3(0.94, 2.36, 0.34), WHITE)
+			_b(Vector3(0.94, 1.88, 0.16), Vector3(1.06, 2.14, 0.24), WOODC)
 		2:
-			_b(Vector3(-0.7, 0.0, -0.7), Vector3(0.7, 0.14, 0.7), WOODC)
-			for k in 7:
-				var w := 0.5 if k % 2 == 0 else 0.36
-				_b(Vector3(-w, 0.14 + k * 0.16, -w), Vector3(w, 0.26 + k * 0.16, w), Color(0.82, 0.68, 0.3))
-			_b(Vector3(-0.62, 1.26, -0.56), Vector3(0.62, 1.42, 0.66), Color(0.62, 0.08, 0.1))
-			_b(Vector3(-0.62, 1.42, -0.62), Vector3(0.62, 3.0, -0.44), Color(0.62, 0.08, 0.1))
-			_b(Vector3(-0.7, 3.0, -0.66), Vector3(0.7, 3.14, -0.4), GOLD)
-			_b(Vector3(-0.27, 1.42, 0.0), Vector3(-0.03, 1.64, 0.82), robe * 0.8)
-			_b(Vector3(0.03, 1.42, 0.0), Vector3(0.27, 1.64, 0.82), robe * 0.8)
-			_busto(robe, 0.0, 1.42)
+			_trono()
+			_b(Vector3(-0.27, 0.86, 0.0), Vector3(-0.03, 1.08, 0.82), robe * 0.8)
+			_b(Vector3(0.03, 0.86, 0.0), Vector3(0.27, 1.08, 0.82), robe * 0.8)
+			_busto(robe, 0.0, 0.86)
 		3:
-			_b(Vector3(-0.85, 0.0, -0.14), Vector3(-0.62, 0.72, 0.14), robe * 0.7)
-			_b(Vector3(-0.48, 0.0, -0.14), Vector3(-0.25, 0.72, 0.14), robe * 0.7)
-			_busto(robe, -0.55, 0.72)
-			var dress := Color(0.46, 0.1, 0.42)
-			_b(Vector3(0.28, 0.0, -0.48), Vector3(1.28, 0.7, 0.48), dress)
-			_b(Vector3(0.42, 0.7, -0.32), Vector3(1.14, 1.5, 0.32), dress)
-			_b(Vector3(0.44, 1.42, -0.34), Vector3(1.12, 1.56, 0.34), GOLD)
-			_b(Vector3(0.58, 1.56, -0.2), Vector3(0.98, 2.0, 0.2), SKIN)
-			_b(Vector3(0.54, 1.82, -0.26), Vector3(1.02, 2.06, 0.1), Color(0.34, 0.2, 0.1))
-			_b(Vector3(0.54, 2.06, -0.24), Vector3(1.02, 2.16, 0.24), GOLD)
-			_b(Vector3(-0.3, 1.66, -0.08), Vector3(0.5, 1.82, 0.08), dress)
-			_b(Vector3(-0.42, 1.62, -0.12), Vector3(-0.26, 1.86, 0.12), SKIN)
+			# il re: in punta di piedi, piegato verso di lei, tirato per l'orecchio
+			var kx := -0.85
+			_b(Vector3(kx - 0.28, 0.14, -0.14), Vector3(kx - 0.04, 0.8, 0.14), robe * 0.7)
+			_b(Vector3(kx + 0.04, 0.14, -0.14), Vector3(kx + 0.28, 0.8, 0.14), robe * 0.7)
+			_b(Vector3(kx + 0.06, 0.0, -0.08), Vector3(kx + 0.26, 0.14, 0.16), Color(0.6, 0.1, 0.12))
+			# un braccio che si sbraccia, l'altro proteso verso la mano che lo tiene
+			_b(Vector3(kx - 0.72, 1.2, -0.09), Vector3(kx - 0.34, 1.38, 0.09), robe * 0.9)
+			_b(Vector3(kx - 0.88, 1.2, -0.09), Vector3(kx - 0.72, 1.4, 0.09), SKIN)
+			_b(Vector3(kx + 0.34, 1.16, -0.09), Vector3(kx + 0.66, 1.34, 0.09), robe * 0.9)
+			_b(Vector3(kx + 0.66, 1.16, -0.09), Vector3(kx + 0.82, 1.36, 0.09), SKIN)
+			_b(Vector3(kx - 0.26, 0.0, -0.08), Vector3(kx - 0.06, 0.14, 0.16), Color(0.6, 0.1, 0.12))
+			_b(Vector3(kx - 0.34, 0.8, -0.2), Vector3(kx + 0.34, 1.5, 0.2), robe)
+			_b(Vector3(kx - 0.36, 1.36, -0.24), Vector3(kx + 0.38, 1.52, 0.24), WHITE)
+			var hx := kx + 0.24  # la testa pende verso la regina
+			_b(Vector3(hx - 0.2, 1.52, -0.18), Vector3(hx + 0.2, 1.9, 0.18), SKIN)
+			_b(Vector3(hx - 0.21, 1.46, 0.1), Vector3(hx + 0.21, 1.66, 0.24), Color(0.92, 0.92, 0.9))
+			_b(Vector3(hx - 0.07, 1.6, 0.2), Vector3(hx + 0.07, 1.68, 0.26), Color(0.24, 0.05, 0.05))
+			_b(Vector3(hx - 0.05, 1.68, 0.18), Vector3(hx + 0.05, 1.78, 0.27), Color(0.9, 0.55, 0.5))
+			_b(Vector3(hx - 0.24, 1.86, -0.2), Vector3(hx, 1.96, 0.2), GOLD)
+			_b(Vector3(hx, 1.9, -0.2), Vector3(hx + 0.22, 2.0, 0.2), GOLD)
+			for q: float in [-0.2, -0.04, 0.08]:
+				_b(Vector3(hx + q, 2.0 if q > 0.0 else 1.96, -0.04), Vector3(hx + q + 0.06, 2.12, 0.04), GOLD)
+			# l'orecchio, rosso e tirato lungo
+			var ear := Color(0.9, 0.3, 0.26)
+			_b(Vector3(hx + 0.2, 1.64, -0.05), Vector3(hx + 0.56, 1.8, 0.05), ear)
+			# la regina
+			var dress := Color(0.5, 0.12, 0.46)
+			var dress2 := Color(0.38, 0.08, 0.36)
+			var qx := 0.72
+			_b(Vector3(qx - 0.62, 0.0, -0.56), Vector3(qx + 0.62, 0.34, 0.56), dress2)
+			_b(Vector3(qx - 0.5, 0.34, -0.44), Vector3(qx + 0.5, 0.8, 0.44), dress)
+			_b(Vector3(qx - 0.36, 0.8, -0.3), Vector3(qx + 0.36, 1.06, 0.3), dress2)
+			_b(Vector3(qx - 0.3, 1.06, -0.24), Vector3(qx + 0.3, 1.14, 0.24), GOLD)
+			_b(Vector3(qx - 0.32, 1.14, -0.24), Vector3(qx + 0.32, 1.72, 0.24), dress)
+			_b(Vector3(qx - 0.36, 1.66, -0.26), Vector3(qx + 0.36, 1.76, 0.26), WHITE)
+			_b(Vector3(qx - 0.19, 1.76, -0.18), Vector3(qx + 0.19, 2.14, 0.18), SKIN)
+			_b(Vector3(qx - 0.1, 1.85, 0.17), Vector3(qx + 0.1, 1.9, 0.2), Color(0.72, 0.14, 0.16))
+			var hair := Color(0.34, 0.2, 0.1)
+			_b(Vector3(qx - 0.22, 2.08, -0.22), Vector3(qx + 0.22, 2.24, 0.14), hair)
+			_b(Vector3(qx - 0.22, 1.8, -0.22), Vector3(qx + 0.22, 2.08, -0.14), hair)
+			_b(Vector3(qx - 0.11, 2.1, -0.36), Vector3(qx + 0.11, 2.3, -0.2), hair)
+			_b(Vector3(qx - 0.22, 2.24, -0.18), Vector3(qx + 0.22, 2.32, 0.18), GOLD)
+			for q: float in [-0.2, -0.03, 0.14]:
+				_b(Vector3(qx + q, 2.32, -0.04), Vector3(qx + q + 0.06, 2.46, 0.04), GOLD)
+			# il braccio teso che arriva all'orecchio: pollice sotto, indice sopra
+			var ear_x := hx + 0.5
+			_b(Vector3(ear_x + 0.06, 1.62, -0.09), Vector3(qx - 0.28, 1.82, 0.09), dress)
+			_b(Vector3(ear_x - 0.08, 1.74, -0.08), Vector3(ear_x + 0.1, 1.88, 0.08), SKIN)
+			_b(Vector3(ear_x - 0.08, 1.56, -0.08), Vector3(ear_x + 0.1, 1.7, 0.08), SKIN)
+			# l'altra mano sul fianco
+			_b(Vector3(qx + 0.32, 1.26, -0.08), Vector3(qx + 0.56, 1.42, 0.08), dress)
+			_b(Vector3(qx + 0.44, 1.06, -0.08), Vector3(qx + 0.56, 1.28, 0.08), dress)
+			_b(Vector3(qx + 0.3, 1.02, -0.08), Vector3(qx + 0.46, 1.16, 0.08), SKIN)
 		4:
 			_b(Vector3(-0.95, 0.0, -0.75), Vector3(0.95, 0.42, 0.75), WOODC)
 			_b(Vector3(-1.0, 0.42, -0.8), Vector3(1.0, 0.58, 0.8), dark)
@@ -383,8 +632,79 @@ func re_scena(robe: Color, v: int) -> ArrayMesh:
 				_b(Vector3(x, 0.02, -0.78), Vector3(x + 0.08, 0.5, 0.78), iron)
 			_b(Vector3(-0.86, 0.5, -0.66), Vector3(0.86, 0.59, 0.66), Color(0.3, 0.62, 0.9))
 			_busto(robe, 0.0, 0.45)
-			_b(Vector3(-1.5, 0.92, 0.28), Vector3(1.5, 1.02, 0.38), WOODC)
-			_b(Vector3(1.32, 0.72, 0.24), Vector3(1.72, 1.2, 0.42), WOODC)
+			if extra:
+				_b(Vector3(-1.5, 0.92, 0.28), Vector3(1.5, 1.02, 0.38), WOODC)
+				_b(Vector3(1.32, 0.72, 0.24), Vector3(1.72, 1.2, 0.42), WOODC)
+		5:
+			# camicia da notte a righe, piedi nudi, berretto da notte che ricade di lato, candela
+			var gown := Color(0.97, 0.95, 0.88)
+			var stripe := Color(0.56, 0.7, 0.92)
+			_b(Vector3(-0.28, 0.0, 0.0), Vector3(-0.06, 0.16, 0.34), SKIN)
+			_b(Vector3(0.06, 0.0, 0.0), Vector3(0.28, 0.16, 0.34), SKIN)
+			_b(Vector3(-0.42, 0.16, -0.26), Vector3(0.42, 1.0, 0.26), gown)
+			for k in 4:
+				_b(Vector3(-0.43, 0.26 + k * 0.2, -0.27), Vector3(0.43, 0.32 + k * 0.2, 0.27), stripe)
+			_busto(gown, 0.0, 0.9, false, 1)
+			var cap_r := Color(0.8, 0.14, 0.14)
+			_b(Vector3(-0.24, 2.02, -0.22), Vector3(0.24, 2.14, 0.22), WHITE)
+			_b(Vector3(-0.2, 2.14, -0.18), Vector3(0.22, 2.3, 0.18), cap_r)
+			_b(Vector3(-0.08, 2.3, -0.14), Vector3(0.3, 2.44, 0.14), WHITE)
+			_b(Vector3(0.12, 2.44, -0.1), Vector3(0.44, 2.54, 0.1), cap_r)
+			_b(Vector3(0.36, 2.28, -0.09), Vector3(0.56, 2.48, 0.09), WHITE)
+			_b(Vector3(0.44, 2.08, -0.08), Vector3(0.62, 2.28, 0.08), cap_r)
+			_b(Vector3(0.42, 1.86, -0.12), Vector3(0.66, 2.1, 0.12), WHITE)
+			_b(Vector3(0.34, 1.22, -0.09), Vector3(0.72, 1.4, 0.09), gown)
+			_b(Vector3(0.7, 1.22, -0.1), Vector3(0.88, 1.4, 0.1), SKIN)
+			_b(Vector3(0.62, 1.4, -0.14), Vector3(0.96, 1.46, 0.14), Color(0.82, 0.68, 0.3))
+			_b(Vector3(0.74, 1.46, -0.06), Vector3(0.84, 1.82, 0.06), WHITE)
+			_b(Vector3(0.76, 1.82, -0.03), Vector3(0.82, 1.98, 0.03), Color(1.0, 0.68, 0.15))
+		6:
+			_gambe(robe * 0.7, -0.75, 0.6)
+			_busto(robe, -0.75, 0.6)
+			if extra:
+				_mamma(Vector3.ZERO)
+		7:  # in fila con le altre armature: il re è quella in mezzo
+			for x: float in [-2.3, -1.15, 1.15, 2.3]:
+				_armatura(x)
+			if extra:
+				_armatura(0.0)
+		8:
+			_gambe(robe * 0.7, 0.0)
+			_busto(robe, 0.0, 0.72, false, 0 if extra else 3)
+			if not extra:
+				return st.commit()
+			# braccia tese e cuscino rosso: la corona (a parte) ci si appoggia sopra
+			_b(Vector3(-0.52, 1.14, 0.1), Vector3(-0.32, 1.32, 0.76), robe)
+			_b(Vector3(0.32, 1.14, 0.1), Vector3(0.52, 1.32, 0.76), robe)
+			_b(Vector3(-0.54, 1.12, 0.74), Vector3(-0.3, 1.32, 0.9), SKIN)
+			_b(Vector3(0.3, 1.12, 0.74), Vector3(0.54, 1.32, 0.9), SKIN)
+			_b(Vector3(-0.62, 1.32, 0.52), Vector3(0.62, 1.5, 1.28), Color(0.72, 0.1, 0.12))
+			for q: Vector2 in [Vector2(-0.68, 0.46), Vector2(0.58, 0.46), Vector2(-0.68, 1.22), Vector2(0.58, 1.22)]:
+				_b(Vector3(q.x, 1.2, q.y), Vector3(q.x + 0.12, 1.42, q.y + 0.12), GOLD)
+		9:
+			_gambe(robe * 0.7, -0.6)
+			_busto(robe, -0.6, 0.72)
+			if not extra:
+				return st.commit()
+			var clerk := Color(0.28, 0.28, 0.32)
+			_b(Vector3(0.5, 0.0, -0.14), Vector3(1.1, 0.8, 0.14), clerk)
+			_b(Vector3(0.48, 0.8, -0.2), Vector3(1.12, 1.4, 0.2), clerk)
+			_b(Vector3(0.62, 1.4, -0.16), Vector3(0.98, 1.74, 0.16), SKIN)
+			_b(Vector3(0.58, 1.74, -0.2), Vector3(1.02, 1.86, 0.2), clerk)
+			var paper := Color(0.95, 0.9, 0.74)
+			_b(Vector3(0.0, 1.14, 0.2), Vector3(0.7, 1.28, 0.42), paper)
+			_b(Vector3(-0.12, 0.04, 0.3), Vector3(0.14, 1.24, 0.38), paper)
+			_b(Vector3(-0.12, 0.0, 0.3), Vector3(0.14, 0.04, 3.6), paper)
+			for k in 9:
+				_b(Vector3(-0.08, 0.04, 0.6 + k * 0.32), Vector3(0.1, 0.05, 0.68 + k * 0.32), Color(0.2, 0.15, 0.12))
+	return st.commit()
+
+
+## Il remo da solo, centrato sulle mani del re: nella fuga in tinozza si muove.
+func re_remo() -> ArrayMesh:
+	_begin(1.2)
+	_b(Vector3(-1.5, -0.05, -0.05), Vector3(1.5, 0.05, 0.05), WOODC)
+	_b(Vector3(1.32, -0.25, -0.09), Vector3(1.72, 0.23, 0.09), WOODC)
 	return st.commit()
 
 

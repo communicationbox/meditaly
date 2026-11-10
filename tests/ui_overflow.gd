@@ -58,6 +58,8 @@ func audit(n: Node, where: String, seen: Dictionary) -> void:
 
 func _run() -> void:
 	var out: String = OS.get_cmdline_user_args()[0]
+	# sempre davanti: macOS non ridisegna una finestra coperta, e la foto aspetterebbe per sempre
+	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_ALWAYS_ON_TOP, true)
 	var main: Node = (load("res://scenes/main.tscn") as PackedScene).instantiate()
 	root.add_child(main)
 	await create_timer(16.0).timeout

@@ -54,6 +54,10 @@ var build_counts: Array[Label] = []
 var build_costs: Array[Label] = []
 var build_glyphs: Array[Glyph] = []
 var power_locks: Array[Glyph] = []
+var special_btn: Button
+var special_glyph: Glyph
+var special_name: Label
+var special_cd: Label
 var power_names: Array[Label] = []
 ## Fila "le tue botteghe" sopra i poteri: icona e quante ne hai di ciascuna.
 var shop_cells: Array[Control] = []
@@ -591,6 +595,7 @@ func _bottom_center() -> void:
 	h.add_theme_constant_override("separation", 6)
 	for k in Defs.POWER_COUNT:
 		h.add_child(_power_card(k))
+	h.add_child(_special_card())
 	board.add_child(h)
 	box.add_child(board)
 	root.add_child(box)
@@ -624,7 +629,7 @@ func _shop_cell(k: int) -> Control:
 	return cell
 
 
-const POWER_W := 108.0
+const POWER_W := 92.0
 const POWER_H := 88.0
 
 
@@ -668,6 +673,33 @@ func _power_card(k: int) -> Button:
 	power_names.append(nm)
 	power_cd.append(cd)
 	return b
+
+
+## Il potere della casata: stessa forma degli altri, ma dorato e col tasto X.
+func _special_card() -> Button:
+	special_btn = UiStyle.button("", "", func(): game.ctrl.start_special(), POWER_W, POWER_H)
+	UiStyle.style_button(special_btn, Color(0.74, 0.5, 0.12), UiStyle.OUTLINE, Color(0.86, 0.6, 0.16))
+	special_glyph = Glyph.new("")
+	special_glyph.position = Vector2((POWER_W - 48.0) * 0.5, 6)
+	special_glyph.size = Vector2(48, 48)
+	special_btn.add_child(special_glyph)
+	var key := UiStyle.label("X", 20, UiStyle.INK, true)
+	key.position = Vector2(9, 3)
+	special_btn.add_child(key)
+	special_name = UiStyle.label("", 16, UiStyle.INK, true)
+	special_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	special_name.position = Vector2(2, 56)
+	special_name.size = Vector2(POWER_W - 4.0, 22)
+	special_btn.add_child(special_name)
+	special_cd = UiStyle.label("", 30, UiStyle.INK, true)
+	special_cd.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	special_cd.position = Vector2(0, 12)
+	special_cd.size = Vector2(POWER_W, 36)
+	special_cd.add_theme_constant_override("outline_size", 8)
+	special_cd.add_theme_color_override("font_outline_color", Color.BLACK)
+	special_btn.add_child(special_cd)
+	special_btn.visible = false
+	return special_btn
 
 
 func _minimap_panel() -> void:
@@ -761,13 +793,13 @@ func _help() -> void:
 	hv.add_child(UiStyle.label("""Crea i soldati dal tuo castello, poi premi T per selezionarli.
 Clic destro su un castello nemico: ci vanno e lo attaccano.
 Per prendere un castello entra nel cortile e uccidi il re: è nel mastio, seduto sul gabinetto.
-Vince chi prende tutti i 12 castelli d'Italia.""", 16))
+Vince chi prende tutti i castelli d'Italia.""", 16))
 	hv.add_child(UiStyle.label("Comandi", 20, UiStyle.GOLD, true))
 	hv.add_child(UiStyle.label("""W A S D o frecce: muovi la vista          Rotella: avvicina e allontana
 Q / E o tasto centrale: ruota la vista    Spazio: torna al tuo castello
 Clic sinistro: seleziona, anche trascinando un riquadro
 Clic destro: manda i selezionati. Su un muro nemico, catapulte e bombarde lo colpiscono
-1-5: poteri          6-0: sfottò agli avversari          T: tutta l'armata          H: nascondi l'interfaccia
+1-5: poteri     X: potere della casata     6-0: sfottò agli avversari          T: tutta l'armata          H: nascondi l'interfaccia
 Con un tuo castello selezionato: G mura, R ripara, M mangano, O olio""", 15, UiStyle.INK))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
@@ -1160,9 +1192,19 @@ func toggle_debug() -> void:
 		for e in Defs.EVENTS.size():
 			var name_e := String(Defs.EVENTS[e][0])
 			v.add_child(UiStyle.button(name_e, "Fa partire subito: %s" % name_e, _debug_event.bind(e), 280.0, 40.0))
+		v.add_child(UiStyle.label("Poteri delle casate", 20, UiStyle.GOLD, true))
+		var specials := GridContainer.new()
+		specials.columns = 3
+		specials.add_theme_constant_override("h_separation", 4)
+		specials.add_theme_constant_override("v_separation", 4)
+		v.add_child(specials)
+		for k: int in Defs.HOUSE_COUNT:
+			specials.add_child(UiStyle.button(String(Defs.HOUSE_POWERS[k].short), String(Defs.HOUSE_POWERS[k].name), func(): game.sim.debug_special(k, game.ctrl.focus), 94.0, 38.0))
 		v.add_child(UiStyle.label("Il re sconfitto", 20, UiStyle.GOLD, true))
-		var kings := HBoxContainer.new()
-		kings.add_theme_constant_override("separation", 4)
+		var kings := GridContainer.new()
+		kings.columns = 6
+		kings.add_theme_constant_override("h_separation", 4)
+		kings.add_theme_constant_override("v_separation", 4)
 		v.add_child(kings)
 		for k: int in Defs.KING_DEATHS.size():
 			kings.add_child(UiStyle.button(str(k + 1), String(Defs.KING_DEATHS[k]) % ["Il Re", "…"], _debug_king.bind(k), 52.0, 40.0))
@@ -1191,6 +1233,8 @@ const PAPER := Color(0.94, 0.87, 0.69)
 const PAPER_INK := Color(0.16, 0.09, 0.05)
 const PAPER_RED := Color(0.66, 0.11, 0.09)
 var paper_layer: Control
+var _paper_btn: Button
+var _paper_who: Label
 var _paper_tw: Tween
 
 
@@ -1302,16 +1346,16 @@ func newspaper(ev: int, title: String, sub: String, picks: PackedInt32Array) -> 
 	bar.add_theme_stylebox_override("fill", fill)
 	bar.add_theme_stylebox_override("background", back)
 	foot.add_child(bar)
-	if not game.net_multiplayer:
-		var spacer := Control.new()
-		spacer.custom_minimum_size = Vector2(16, 0)
-		foot.add_child(spacer)
-		var cont := UiStyle.button("Volta pagina", "Si riprende a giocare", _resume_paper, 190.0, 46.0)
+	_paper_who = _ink("", 19, PAPER_RED)
+	foot.add_child(_paper_who)
+	if game.my_house >= 0:  # chi ospita senza giocare non ha nulla da girare
+		var cont := UiStyle.button("Volta pagina", "Riparte quando hanno girato pagina tutti", _resume_paper, 210.0, 46.0)
 		UiStyle.style_button(cont, Color(1.0, 0.76, 0.22), UiStyle.OUTLINE, Color(1.0, 0.86, 0.38))
-		for kk: String in ["font_color", "font_hover_color", "font_pressed_color"]:
+		for kk: String in ["font_color", "font_hover_color", "font_pressed_color", "font_disabled_color"]:
 			cont.add_theme_color_override(kk, PAPER_INK)
 		cont.add_theme_font_size_override("font_size", 22)
 		foot.add_child(cont)
+		_paper_btn = cont
 	v.add_child(foot)
 	# il giornale arriva girando, come nei film
 	page.pivot_offset = Vector2(550, 340)
@@ -1326,10 +1370,39 @@ func newspaper(ev: int, title: String, sub: String, picks: PackedInt32Array) -> 
 		game.fx.sfx.play("horn", game.ctrl.cam.global_position, 2.0, 0.0)
 
 
+## «Ho letto»: si riparte quando hanno girato pagina tutti, o allo scadere del tempo.
 func _resume_paper() -> void:
-	if game.sim != null:
-		game.sim.news_t = 0.0
-	_close_paper()
+	if is_instance_valid(_paper_btn):
+		_paper_btn.disabled = true
+		_paper_btn.text = "Aspetto gli altri"
+	game.send_cmd("news_read", [])
+
+
+func paper_status(done: int, total: int) -> void:
+	if done >= total:
+		_close_paper()
+	elif is_instance_valid(_paper_who):
+		_paper_who.text = "Hanno letto in %d su %d" % [done, total]
+
+
+func _update_special() -> void:
+	var row: Array = game.state[1][game.my_house]
+	var left: int = row[-2]
+	special_btn.visible = left >= 0
+	if left < 0:
+		return
+	var pw: Dictionary = Defs.HOUSE_POWERS[game.my_house]
+	if special_glyph.kind != String(pw.icon):
+		special_glyph.kind = pw.icon
+		special_name.text = pw.short
+		special_btn.tooltip_text = "[X] %s\n%s\nUno ogni %d secondi%s" % [pw.name, pw.desc, int(Sim.SPECIAL_CD),
+			"\nChi difende il suo re in pericolo non ci casca" if game.my_house in Defs.DUTY_POWERS else ""]
+		special_glyph.queue_redraw()
+	special_btn.disabled = left > 0
+	special_cd.text = str(left) if left > 0 else ""
+	if special_glyph.dim != (left > 0):
+		special_glyph.dim = left > 0
+		special_glyph.queue_redraw()
 
 
 func _close_paper() -> void:
@@ -1755,6 +1828,7 @@ func pending_text() -> String:
 			if int(pend.id) == Defs.P_PARMIGIANO:
 				return "Tieni premuto e trascina: direzione e potenza  ·  Clic: tiro automatico  ·  Destro: annulla"
 			return "Clic sinistro: %s  ·  Clic destro: annulla" % Defs.POWERS[int(pend.id)].name
+		"special": return "Clic sinistro: %s  ·  Clic destro: annulla" % Defs.HOUSE_POWERS[int(pend.id)].name
 		"mangano": return "Clic sinistro: tira la pietra  ·  Clic destro: annulla"
 		"oil": return "Clic sinistro: versa l'olio  ·  Clic destro: annulla"
 		"build":
@@ -1855,7 +1929,7 @@ func _refresh_castle(cid: int) -> void:
 	var at_cap := _my_troops_and_queue() >= Defs.HOUSE_UNIT_CAP
 	for t in recruit_btns.size():
 		var cost: int = Defs.UNITS[t].cost
-		var can := g >= cost and (t != Defs.FRATE or church) and not at_cap
+		var can := g >= ceili(cost * (0.5 if int(game.state[1][game.my_house][-1]) == 1 else 1.0)) and (t != Defs.FRATE or church) and not at_cap
 		recruit_btns[t].disabled = not can
 		var d: Dictionary = Defs.UNITS[t]
 		var tip := "%s: %d fiorini\n%s\nVita %d · Velocità %d" % [d.name, d.cost, d.desc, d.hp, int(d.speed)]
@@ -2010,6 +2084,7 @@ func _refresh_powers() -> void:
 		power_cost[k].add_theme_color_override("font_color", UiStyle.DANGER_TEXT if poor else UiStyle.INK)
 		power_names[k].text = String(Defs.BUILDINGS[Defs.POWER_BUILDING[k]].short) if locked else String(d.short)
 		power_names[k].add_theme_color_override("font_color", UiStyle.GOLD if locked else UiStyle.INK)
+	_update_special()
 	var have: Array[int] = []
 	have.resize(Defs.BUILDING_COUNT)
 	have.fill(0)

@@ -79,6 +79,8 @@ Il server è autoritativo: i client inviano comandi validati e ricevono snapshot
 tests/net_test.sh                                     # server + 2 client: mondi identici byte per byte
 "$GODOT" --headless --path . -s tests/stuck.gd -- --seed 1   # truppe incastrate in una partita tra IA (limite 1%)
 "$GODOT" --headless --path . -s tests/pressure.gd -- --seeds 3 --min 30   # quanto è attaccato ogni castello (nessuno deve restare a zero)
+"$GODOT" --headless --path . -s tests/matchups.gd     # scontri a parità di fiorini: le picche fermano i cavalieri, l'IA risponde
+"$GODOT" --headless --path . -s tests/knight_rush.gd -- --games 9 --min 20   # una casata fa solo cavalieri: non deve vincere sempre
 "$GODOT" --path . -s tests/save_flow.gd -- CARTELLA      # pausa, salva, torna al menu, continua: mondo identico
 "$GODOT" --path . -s tests/menu_shots.gd -- CARTELLA      # il menu principale sull'Italia in voxel
 "$GODOT" --path . -s tests/shops_shots.gd -- CARTELLA     # le sei botteghe, i loro personaggi e il menu

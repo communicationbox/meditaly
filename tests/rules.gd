@@ -2,6 +2,7 @@ extends SceneTree
 ## Regole senza grafica: conquista e vittoria, crateri, codifica delle modifiche, riparazioni.
 ##   godot --headless --path . -s tests/rules.gd
 
+const CTRL_SCRIPT := preload("res://scripts/controller.gd")
 var fails := 0
 
 func check(n: String, ok: bool) -> void:
@@ -522,6 +523,23 @@ func _run() -> void:
 	check("Cagliari conta come isolata", sim._isolation_factor(g.castles[11]) <= 0.55)
 	check("Napoli non è isolata", sim._isolation_factor(g.castles[8]) == 1.0)
 	check("almeno 200 titoli di giornale", News.HEADLINES.size() >= 200)
+	var k_shot := InputEventKey.new()
+	k_shot.pressed = true
+	k_shot.keycode = KEY_4
+	k_shot.meta_pressed = true
+	k_shot.shift_pressed = true
+	var k_meta := InputEventKey.new()
+	k_meta.pressed = true
+	k_meta.keycode = KEY_META
+	var k_space := InputEventKey.new()
+	k_space.pressed = true
+	k_space.keycode = KEY_SPACE
+	check("lo screenshot non salta la scena del re", not CTRL_SCRIPT.skips_cinematic(k_shot) and not CTRL_SCRIPT.skips_cinematic(k_meta))
+	check("un tasto normale salta la scena del re", CTRL_SCRIPT.skips_cinematic(k_space))
+	var deaths_ok := Defs.KING_DEATHS.size() == 10
+	for v in range(1, Defs.KING_DEATHS.size()):
+		deaths_ok = deaths_ok and UnitModels.new().re_scena(Color.RED, v).get_surface_count() > 0
+	check("ogni uscita di scena del re ha il suo modello", deaths_ok)
 	# debug: ogni evento parte a comando, anche a campo vuoto
 	var dbg_ok := true
 	for e in Defs.EVENTS.size():
@@ -547,6 +565,76 @@ func _run() -> void:
 	sim.equal_houses = true
 	check("casate uguali: nessun bonus", sim._stat(2, Defs.STAT_SOLDI) == 1.0 and sim._stat(7, Defs.STAT_FORZA) == 1.0)
 	sim.equal_houses = false
+	# il potere di ogni casata fa davvero quello che promette
+	var sp_at: Vector3 = (g.castles[5].gate_out as Vector3) + (g.castles[5].dir as Vector3) * 40.0
+	for k in Defs.HOUSE_COUNT:
+		for u: Sim.U in sim.ulist.duplicate():
+			u.hp = 0.0
+		sim._cleanup_dead()
+		var other := (k + 1) % Defs.HOUSE_COUNT
+		sim.houses[k].alive = true
+		sim.houses[other].gold = 500.0
+		sim.houses[k].gold = 0.0
+		if sim._nearest_castle_of(k, sp_at).is_empty():
+			g.castles[k].owner = k
+		var fired := sim.debug_special(k, sp_at)
+		var victim_u: Sim.U = null
+		var my_u: Sim.U = null
+		var mine_n := 0
+		for u: Sim.U in sim.ulist:
+			if u.team == other and victim_u == null:
+				victim_u = u
+			if u.team == k:
+				mine_n += 1
+				if my_u == null:
+					my_u = u
+		var ok := fired
+		match k:
+			0: ok = ok and victim_u.sleep > 0.0
+			1: ok = ok and victim_u.feast > 0.0 and float(sim.houses[k].gold) > 0.0
+			2: ok = ok and float(sim.houses[k].gold) > 0.0
+			3: ok = ok and float(sim.houses[k].discount_until) > sim.time
+			4: ok = ok and mine_n == 8
+			5: ok = ok and float(sim.houses[other].get("excom_until", 0.0)) > sim.time
+			6: ok = ok and my_u.drunk > 0.0
+			7: ok = ok and mine_n == 9
+			8: ok = ok and victim_u.flee > 0.0
+		check("potere di %s" % Defs.HOUSES[k].name, ok)
+		check("il potere di %s ha la sua attesa" % Defs.HOUSES[k].name, not sim.cmd_special(k, sp_at))
+	sim.equal_houses = true
+	sim.houses[2].sp_t = 0.0
+	check("casate uguali: niente poteri", not sim.cmd_special(2, sp_at))
+	sim.equal_houses = false
+	# apericena sul castello con il re all'80%: chi lo difende non va allo spritz
+	for u: Sim.U in sim.ulist.duplicate():
+		u.hp = 0.0
+	sim._cleanup_dead()
+	var dc: Dictionary = g.castles[5]
+	var down_owner := int(dc.owner)
+	dc.owner = 2
+	var guards: Array = []
+	for k in 6:
+		guards.append(sim.spawn_unit(Defs.FANTE, 2, (dc.rally as Vector3) + Vector3(k % 3 - 1, 0, k / 3) * 1.5))
+	var passer := sim.spawn_unit(Defs.FANTE, 3, (dc.rally as Vector3) + Vector3(0, 0, 3))
+	dc.king_hp = Sim.KING_HP * 0.2
+	dc.king_calm = Sim.KING_CALM
+	sim.houses[1].sp_t = 0.0
+	sim.cmd_special(1, dc.rally)
+	check("apericena: chi difende il re in pericolo non molla il posto", guards.all(func(u: Sim.U) -> bool: return u.feast <= 0.0))
+	check("apericena: gli altri allo spritz ci vanno", passer.feast > 0.0)
+	# lanciata prima che il re sia colpito: alla prima botta al re tornano tutti
+	dc.king_hp = Sim.KING_HP
+	dc.king_calm = 0.0
+	sim.houses[1].sp_t = 0.0
+	sim.cmd_special(1, dc.rally)
+	var feasting := guards.filter(func(u: Sim.U) -> bool: return u.feast > 0.0).size()
+	sim._hurt_king(dc, 10.0, 1)
+	check("apericena: alla prima botta al re i difensori tornano (%d a tavola)" % feasting, feasting > 0 and guards.all(func(u: Sim.U) -> bool: return u.feast <= 0.0))
+	dc.owner = down_owner
+	dc.king_hp = Sim.KING_HP
+	for u: Sim.U in sim.ulist.duplicate():
+		u.hp = 0.0
+	sim._cleanup_dead()
 	# vittoria: tutti i castelli alla stessa casata
 	for cs: Dictionary in g.castles:
 		cs.owner = 1

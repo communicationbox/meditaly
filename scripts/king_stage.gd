@@ -11,6 +11,18 @@ var king_mm: MultiMesh
 var torch: OmniLight3D
 var prop: MeshInstance3D
 var king_mi: MultiMeshInstance3D
+var hic: Label3D
+const ARMOUR := 7  # l'armatura starnutisce qui, nella sala
+const SNEEZE_AT := 1.75
+const CROWN := 8  # la corona di cartone si affloscia sul cuscino, davanti a tutti
+const TEAR_AT := 1.5
+const CROWN_POS := Vector3(0.0, 1.46, 0.86)
+var fig: MeshInstance3D  # l'armatura col re dentro, in mezzo alla fila
+var pile: MeshInstance3D
+var boxer: MeshInstance3D
+var _sneezed := false
+var _variant := 0
+var _t := 0.0
 
 
 func setup(unit_material: Material) -> void:
@@ -35,6 +47,26 @@ func setup(unit_material: Material) -> void:
 	prop = MeshInstance3D.new()
 	prop.material_override = room_mat
 	add_child(prop)
+	var models := UnitModels.new()
+	for part: Array in [["fig", models.re_armatura()], ["pile", UnitModels.new().re_crollo()], ["boxer", UnitModels.new().re_boxer()]]:
+		var n := MeshInstance3D.new()
+		n.mesh = part[1]
+		n.material_override = room_mat
+		n.scale = Vector3.ONE * 0.62
+		n.visible = false
+		add_child(n)
+		set(String(part[0]), n)
+	hic = Label3D.new()
+	hic.text = "Hic!"
+	hic.font = UiStyle.comic_font()
+	hic.font_size = 96
+	hic.outline_size = 22
+	hic.pixel_size = 0.006
+	hic.modulate = Color(0.72, 0.16, 0.5)
+	hic.outline_modulate = Color(1, 0.97, 0.88)
+	hic.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	hic.visible = false
+	add_child(hic)
 	king_mm.set_instance_transform(0, Transform3D(Basis.IDENTITY, Vector3.ZERO))
 	torch = OmniLight3D.new()
 	torch.light_color = Color(1.0, 0.72, 0.4)
@@ -48,14 +80,113 @@ func setup(unit_material: Material) -> void:
 ## Mostra il set con lo stendardo e la veste del re del colore della casata che lo perde.
 func show_for(house: int, variant := 0) -> void:
 	var col: Color = Defs.HOUSES[clampi(house, 0, Defs.HOUSES.size() - 1)].color
-	room.mesh = _build_room(col)
+	room.mesh = _build_room(col, variant == 0)
+	_variant = variant
+	prop.rotation = Vector3.ZERO
+	hic.visible = variant == 1
+	hic.text = "Hic!"
+	hic.outline_modulate.a = 1.0
+	_t = 0.0
+	_sneezed = false
+	fig.visible = variant == ARMOUR or variant == CROWN
+	boxer.rotation = Vector3.ZERO
+	if variant == CROWN:
+		fig.mesh = UnitModels.new().re_corona_meta(true, true)
+		boxer.mesh = UnitModels.new().re_corona_meta(true, false)
+		boxer.visible = true
+		for half: MeshInstance3D in [fig, boxer]:
+			half.position = CROWN_POS
+			half.rotation = Vector3.ZERO
+			half.scale = Vector3.ONE * 0.95
+	else:
+		fig.mesh = UnitModels.new().re_armatura()
+		boxer.mesh = UnitModels.new().re_boxer()
+		for part: MeshInstance3D in [fig, boxer]:
+			part.position = Vector3.ZERO
+			part.scale = Vector3.ONE * 0.62
+	boxer.visible = variant == CROWN
+	pile.visible = false
+	if variant == ARMOUR:
+		fig.rotation = Vector3.ZERO
 	king_mi.visible = variant == 0
 	prop.visible = variant != 0
 	if variant != 0:
-		prop.mesh = UnitModels.new().re_scena(col, variant)
-		prop.scale = Vector3.ONE * (0.66 if variant == 2 else 0.8)  # le figure alte devono stare in quadro
+		prop.mesh = UnitModels.new().re_scena(col, variant, variant != ARMOUR)  # con la corona: cuscino e braccia tese
+		prop.scale = Vector3.ONE * (1.0 if variant == 2 else (0.72 if variant == 1 else (0.62 if variant == 7 else 0.8)))  # le figure alte devono stare in quadro
 	king_mm.set_instance_custom_data(0, Color(0.0, 0.0, 1.0, float(house)))
 	visible = true
+
+
+## Il re nella botte ondeggia e singhiozza.
+func _process(dt: float) -> void:
+	if not visible:
+		return
+	_t += dt
+	if _variant == ARMOUR:
+		_armour_tick()
+		return
+	if _variant == CROWN:
+		_crown_tick()
+		return
+	if _variant != 1:
+		return
+	prop.rotation.z = sin(_t * 2.4) * 0.07
+	prop.rotation.x = sin(_t * 1.5) * 0.035
+	hic.modulate = Color(0.72, 0.16, 0.5)
+	var phase := fposmod(_t, 1.3) / 1.3
+	hic.position = Vector3(-0.95, 2.0 + phase * 0.6, 0.5)
+	hic.modulate.a = 1.0 - phase * phase
+
+
+## La corona d'oro si strappa in due: era cartone, e le due metà cadono ai lati del cuscino.
+func _crown_tick() -> void:
+	if _t < TEAR_AT:
+		return
+	if not _sneezed:
+		_sneezed = true
+		fig.mesh = UnitModels.new().re_corona_meta(false, true)
+		boxer.mesh = UnitModels.new().re_corona_meta(false, false)
+		hic.text = "Strap!"
+		hic.visible = true
+		hic.position = Vector3(0.0, 2.5, 0.8)
+		hic.modulate = Color(0.78, 0.1, 0.08)
+		var g: Node = get_parent()
+		if g.fx and g.fx.sfx:
+			g.fx.sfx.play("crash", global_position, -4.0, 0.2)
+	var k := clampf((_t - TEAR_AT) / 0.75, 0.0, 1.0)
+	var spread := smoothstep(0.0, 0.5, k) * 0.34
+	var drop := k * k * (CROWN_POS.y - 0.42)  # si ferma a terra, sul fianco, senza sprofondare
+	fig.position = CROWN_POS + Vector3(-spread - k * 0.5, -drop, 0)
+	boxer.position = CROWN_POS + Vector3(spread + k * 0.5, -drop, 0)
+	fig.rotation.z = k * 1.5
+	boxer.rotation.z = -k * 1.5
+	var fade := clampf(1.0 - (_t - TEAR_AT - 0.9) / 0.4, 0.0, 1.0)
+	hic.modulate.a = fade
+	hic.outline_modulate.a = fade
+
+
+## Trema, starnutisce, l'armatura crolla e dentro c'era il re in boxer.
+func _armour_tick() -> void:
+	if _t < SNEEZE_AT:
+		var shake := smoothstep(0.7, SNEEZE_AT, _t)
+		fig.rotation.z = sin(_t * 46.0) * 0.07 * shake
+		return
+	if not _sneezed:
+		_sneezed = true
+		fig.visible = false
+		pile.visible = true
+		boxer.visible = true
+		hic.text = "Etciù!"
+		hic.visible = true
+		hic.position = Vector3(-0.2, 2.25, 0.5)
+		hic.modulate = Color(0.16, 0.42, 0.7)
+		var g: Node = get_parent()
+		if g.fx and g.fx.sfx:
+			g.fx.sfx.play("crash", global_position, 2.0, 0.2)
+	var fade := clampf(1.0 - (_t - SNEEZE_AT - 0.8) / 0.5, 0.0, 1.0)  # ben leggibile, poi svanisce
+	hic.modulate.a = fade
+	hic.outline_modulate.a = fade
+	boxer.rotation.z = sin(_t * 30.0) * 0.03
 
 
 func hide_stage() -> void:
@@ -64,7 +195,7 @@ func hide_stage() -> void:
 
 ## Stanza voxel aperta sul davanti: pavimento a scacchi, muri di pietra, finestra, stendardo,
 ## torcia e tappeto. Il re siede al centro, rivolto verso +Z.
-func _build_room(banner: Color) -> ArrayMesh:
+func _build_room(banner: Color, gazzette: bool) -> ArrayMesh:
 	var m := UnitModels.new()
 	m._begin(1.0)
 	var s1 := Color(0.56, 0.54, 0.5)
@@ -92,6 +223,7 @@ func _build_room(banner: Color) -> ArrayMesh:
 	m._b(Vector3(-1.2, 0.0, 0.6), Vector3(1.2, 0.04, 2.6), Color(0.95, 0.76, 0.22))
 	m._b(Vector3(-1.05, 0.0, 0.75), Vector3(1.05, 0.06, 2.45), Color(0.62, 0.08, 0.1))
 	# pila di Gazzette accanto al gabinetto
-	for k in 4:
-		m._b(Vector3(-1.3, k * 0.09, -0.2), Vector3(-0.85, k * 0.09 + 0.08, 0.3), Color(0.93, 0.9, 0.8) * (0.9 + 0.03 * k))
+	if gazzette:
+		for k in 4:
+			m._b(Vector3(-1.3, k * 0.09, -0.2), Vector3(-0.85, k * 0.09 + 0.08, 0.3), Color(0.93, 0.9, 0.8) * (0.9 + 0.03 * k))
 	return m.st.commit()

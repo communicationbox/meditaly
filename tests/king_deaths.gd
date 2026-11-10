@@ -28,8 +28,12 @@ func _run() -> void:
 		g.hud._debug_king(v)
 		await create_timer(1.8).timeout
 		await shot(out, "re_%d_set" % v)
-		await create_timer(2.5).timeout
+		await create_timer(1.4 + Controller.exit_time(v) * 0.42).timeout
 		await shot(out, "re_%d_mondo" % v)
-		await create_timer(2.5).timeout
+		await create_timer(Controller.exit_time(v) * 0.42).timeout
+		await shot(out, "re_%d_fine" % v)
+		while not g.ctrl.cine.is_empty():  # il volo in cielo dura più delle altre
+			await process_frame
+		await create_timer(0.8).timeout
 	print("FALLITI: 0")
 	quit(0)

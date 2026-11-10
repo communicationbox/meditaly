@@ -267,6 +267,8 @@ func _exec_cmd(peer: int, kind: String, a: Array) -> void:
 		"mangano": if _valid_castle(a[0]): sim.cmd_mangano(team, a[0], _clamp_p(a[1]))
 		"oil": if _valid_castle(a[0]): sim.cmd_oil(team, a[0], _clamp_p(a[1]))
 		"power": sim.cmd_power(team, a[0], _clamp_p(a[1]))
+		"special": sim.cmd_special(team, _clamp_p(a[0]))
+		"news_read": sim.cmd_news_read(team)
 		"power_aim": sim.cmd_power(team, a[0], _clamp_p(a[1]), a[2])
 		"build": sim.cmd_build(team, a[0], _clamp_p(a[1]))
 		"taunt": sim.cmd_taunt(team, a[0])
@@ -282,6 +284,8 @@ func _args_ok(kind: String, a: Array) -> bool:
 		"garrison", "repair", "taunt": want = [TYPE_INT]
 		"mangano", "oil", "power": want = [TYPE_INT, TYPE_VECTOR3]
 		"power_aim": want = [TYPE_INT, TYPE_VECTOR3, TYPE_VECTOR3]
+		"special": want = [TYPE_VECTOR3]
+		"news_read": want = []
 		_: return false
 	if a.size() != want.size():
 		return false
@@ -404,6 +408,18 @@ func r_fx(kind: String, p: Vector3, a: float) -> void:
 
 
 ## Evento a sorpresa: grande titolo al centro dello schermo per tutti.
+func news_status_all(done: int, total: int) -> void:
+	r_news_status(done, total)
+	if _has_peers():
+		r_news_status.rpc(done, total)
+
+
+@rpc("authority", "reliable")
+func r_news_status(done: int, total: int) -> void:
+	if hud:
+		hud.paper_status(done, total)
+
+
 func banner_all(title: String, sub: String, p: Vector3, life := 0.0, ev := 0, news := PackedInt32Array()) -> void:
 	r_banner(title, sub, p, life, ev, news)
 	if _has_peers():

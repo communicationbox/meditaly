@@ -16,7 +16,12 @@ var house_title: Label
 var house_sub: Label
 var shield_btns: Array[Control] = []
 var stat_bars: Array = []
-var _logo: TextureRect
+var power_lbl: Label
+var power_name: Label
+var power_icon: Glyph
+var power_box: Control
+var power_medal: Medal
+var _logo: Control  # il logo con, nell'angolo, Impostazioni ed Esci
 var friends_box: Control
 var _loading: Control
 var _loading_lbl: Label
@@ -45,6 +50,7 @@ const LOAD_TIPS := [
 	"Ogni potere ha la sua bottega: se te la abbattono, lo perdi.",
 	"Davanti al Parmigiano si scappa. Nella direzione sbagliata.",
 	"Chi se ne sta tranquillo attira gli invidiosi.",
+	"Col re in pericolo, i difensori non cascano negli scherzi delle altre casate.",
 ]
 var _backdrop: Node3D
 var _cam: Camera3D
@@ -237,12 +243,28 @@ func _build_panel() -> void:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 0)
 	sign_board.add_child(v)
-	_logo = TextureRect.new()
-	_logo.texture = load("res://assets/ui/logo.svg")
-	_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_logo = Control.new()
 	_logo.custom_minimum_size = Vector2(0, 128)
 	_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var logo_img := TextureRect.new()
+	logo_img.texture = load("res://assets/ui/logo.svg")
+	logo_img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	logo_img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	logo_img.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	logo_img.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_logo.add_child(logo_img)
+	# Impostazioni ed Esci nell'angolo accanto al logo: in basso resta posto per le voci che spiegano
+	var corner := VBoxContainer.new()
+	corner.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	corner.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	corner.add_theme_constant_override("separation", 6)
+	var st := _small("Impostazioni", "Audio, schermo e difficoltà")
+	st.pressed.connect(_open_settings)
+	corner.add_child(st)
+	var ex := _small("Esci", "Chiude il gioco")
+	ex.pressed.connect(func(): get_tree().quit())
+	corner.add_child(ex)
+	_logo.add_child(corner)
 	v.add_child(_logo)
 	v.add_child(_gap(14))
 	v.add_child(UiStyle.label("Scegli la tua casata", 18, UiStyle.GOLD, true))
@@ -266,6 +288,14 @@ func _build_panel() -> void:
 	house_sub = UiStyle.label("", 17, UiStyle.MUTED)
 	v.add_child(house_sub)
 	v.add_child(_gap(10))
+	# a sinistra i cubetti, a destra il potere della casata
+	var sheet := HBoxContainer.new()
+	sheet.add_theme_constant_override("separation", 12)
+	v.add_child(sheet)
+	var stats_col := VBoxContainer.new()
+	stats_col.add_theme_constant_override("separation", 9)
+	stats_col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	sheet.add_child(stats_col)
 	for k in Defs.STAT_NAMES.size():
 		var row_s := HBoxContainer.new()
 		row_s.add_theme_constant_override("separation", 10)
@@ -276,11 +306,12 @@ func _build_panel() -> void:
 		bar.fill = StatBar.COLORS[k]
 		bar.custom_minimum_size = Vector2(5 * StatBar.CUBE + 4 * StatBar.GAP, StatBar.CUBE)
 		row_s.add_child(bar)
-		v.add_child(row_s)
-		v.add_child(_gap(4))
+		stats_col.add_child(row_s)
 		stat_bars.append(bar)
+	sheet.add_child(_power_card())
+	v.add_child(_gap(6))
 	var eq := CheckBox.new()
-	eq.text = "Casate uguali: stessi valori per tutti"
+	eq.text = "Casate uguali: stessi valori, nessun potere"
 	eq.focus_mode = Control.FOCUS_NONE
 	eq.add_theme_font_override("font", UiStyle.body_font())
 	eq.add_theme_font_size_override("font_size", 16)
@@ -316,23 +347,17 @@ func _build_panel() -> void:
 	more.add_theme_constant_override("v_separation", 10)
 	var sv := SaveGame.summary()
 	if not sv.is_empty():
-		var cont := _secondary("Continua", "%s, %d minuti di gioco · %s" % [Defs.HOUSES[int(sv.house)].name, int(sv.minutes), sv.date])
+		var cont := _secondary("Continua", "%s, %d minuti di gioco · %s" % [Defs.HOUSES[int(sv.house)].name, int(sv.minutes), sv.date], "%s, %d minuti" % [Defs.HOUSES[int(sv.house)].name, int(sv.minutes)])
 		cont.pressed.connect(func(): _go(func(): continue_game.emit(), false))
 		more.add_child(cont)
-	var tut := _secondary("Tutorial guidato", "Prima volta? Ti guida passo passo")
+	var tut := _secondary("Tutorial guidato", "Prima volta? Una partita vera con la casata scelta: ti guida un passo alla volta e le altre casate aspettano. Puoi saltarlo quando vuoi", "Partita di prova, passo passo")
 	tut.pressed.connect(func(): _go(func(): tutorial.emit(house, name_edit.text)))
 	more.add_child(tut)
-	var fr := _secondary("Gioca con gli amici", "Ospita una partita o entra in quella di un amico")
+	var fr := _secondary("Gioca con gli amici", "Ospita una partita o entra in quella di un amico", "Ospita o entra in rete")
 	fr.pressed.connect(func():
 		friends_box.visible = not friends_box.visible
 		_logo.visible = not friends_box.visible)  # il cartello resta tutto dentro lo schermo
 	more.add_child(fr)
-	var st := _secondary("Impostazioni", "Audio, schermo e difficoltà")
-	st.pressed.connect(_open_settings)
-	more.add_child(st)
-	var ex := _secondary("Esci", "Chiude il gioco")
-	ex.pressed.connect(func(): get_tree().quit())
-	more.add_child(ex)
 	for k: Node in more.get_children():
 		(k as Control).size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_child(more)
@@ -570,7 +595,64 @@ func _tick_icon(on: bool) -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
+## La carta del potere: pergamena con filetto dorato, sigillo di ceralacca, titolo gotico.
+func _power_card() -> Control:
+	const INK_D := Color(0.17, 0.09, 0.04)
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.95, 0.88, 0.7)
+	sb.border_color = UiStyle.OUTLINE
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(11)
+	sb.set_content_margin_all(5)
+	card.add_theme_stylebox_override("panel", sb)
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.custom_minimum_size = Vector2(240, 150)  # stessa altezza per tutte: cambiando casata il menu non balla
+	power_box = card
+	var fil := PanelContainer.new()
+	var fs := StyleBoxFlat.new()
+	fs.bg_color = Color(0, 0, 0, 0)
+	fs.border_color = Color(0.74, 0.5, 0.16)
+	fs.set_border_width_all(2)
+	fs.set_corner_radius_all(7)
+	fs.set_content_margin_all(7)
+	fil.add_theme_stylebox_override("panel", fs)
+	card.add_child(fil)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 3)
+	fil.add_child(col)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 7)
+	col.add_child(head)
+	power_medal = Medal.new()
+	power_medal.custom_minimum_size = Vector2(66, 66)
+	head.add_child(power_medal)
+	power_icon = Glyph.new("")
+	power_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 16)
+	power_medal.add_child(power_icon)
+	power_name = UiStyle.label("", 20, Color(0.64, 0.1, 0.08), true)
+	power_name.add_theme_font_override("font", UiStyle.display_font())
+	power_name.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	power_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	power_name.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	power_name.add_theme_constant_override("line_spacing", -2)
+	head.add_child(power_name)
+	power_lbl = UiStyle.label("", 16, INK_D)
+	power_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	power_lbl.add_theme_constant_override("line_spacing", -2)
+	col.add_child(power_lbl)
+	return card
+
+
 func _show_stats() -> void:
+	var pw: Dictionary = Defs.HOUSE_POWERS[house]
+	power_name.text = String(pw.name)
+	power_lbl.text = pw.desc
+	power_icon.kind = pw.icon
+	power_icon.queue_redraw()
+	power_medal.color = Defs.HOUSES[house].color
+	power_medal.queue_redraw()
+	power_box.visible = not Settings.equal_houses
 	for k in stat_bars.size():
 		(stat_bars[k] as StatBar).set_value(3 if Settings.equal_houses else int(Defs.HOUSES[house].stats[k]))
 
@@ -625,16 +707,49 @@ func _primary(text: String, tip: String) -> Button:
 	return b
 
 
-func _secondary(text: String, tip: String) -> Button:
+## Pulsante piccolo per le voci di servizio (Impostazioni, Esci): il nome basta a dire cosa fa.
+func _small(text: String, tip: String) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.tooltip_text = tip
-	b.custom_minimum_size = Vector2(0, 48)
+	b.custom_minimum_size = Vector2(118, 32)
+	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.add_theme_font_override("font", UiStyle.title_font())
+	b.add_theme_font_size_override("font_size", 15)
+	UiStyle.style_button(b)
+	return b
+
+
+## Pulsante secondario: il nome e, sotto, una riga che dice cosa succede cliccando (sempre visibile,
+## non solo nel tooltip). Il nome sta in una Label: il testo del Button resta vuoto.
+func _secondary(text: String, tip: String, sub := "") -> Button:
+	var b := Button.new()
+	b.name = text  # col sottotitolo il testo sta in una Label: il nome lo ritrova (anche nei test)
+	b.tooltip_text = tip
+	b.custom_minimum_size = Vector2(0, 48 if sub == "" else 60)
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	b.add_theme_font_override("font", UiStyle.title_font())
 	b.add_theme_font_size_override("font_size", 19)
 	UiStyle.style_button(b)
+	if sub == "":
+		b.text = text
+		return b
+	var v := VBoxContainer.new()
+	v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_theme_constant_override("separation", -2)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var t := UiStyle.label(text, 19, UiStyle.INK, true)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(t)
+	var s := UiStyle.label(sub, 14, UiStyle.MUTED)
+	s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	s.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	v.add_child(s)
+	b.add_child(v)
+	b.custom_minimum_size.x = 0.0
 	return b
 
 
@@ -668,10 +783,45 @@ func _style_edit(e: LineEdit) -> void:
 
 
 ## Filetto d'oro con un rombo al centro, sotto il titolo.
+## Sigillo di ceralacca: una colata irregolare col bordo gonfio, e al centro l'impronta del timbro.
+class Medal:
+	extends Control
+	const WAX := Color(0.66, 0.08, 0.1)
+	const WAX_DARK := Color(0.4, 0.03, 0.06)
+	const WAX_LIGHT := Color(0.88, 0.26, 0.24)
+	var color := Color.WHITE
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	## Il contorno della colata: tondo ma mai regolare, sempre uguale per lo stesso raggio.
+	func _blob(c: Vector2, r: float) -> PackedVector2Array:
+		var pts := PackedVector2Array()
+		for k in 56:
+			var a := TAU * float(k) / 56.0
+			var bump := 0.07 * sin(a * 3.0 + 0.6) + 0.05 * sin(a * 5.0 + 2.1) + 0.035 * sin(a * 9.0 + 4.0)
+			pts.append(c + Vector2(cos(a), sin(a)) * r * (1.0 + bump))
+		return pts
+
+	func _draw() -> void:
+		var c := size * 0.5
+		var r := minf(size.x, size.y) * 0.5 * 0.88
+		draw_colored_polygon(_blob(c + Vector2(1.5, 3.0), r), Color(0.17, 0.09, 0.04, 0.45))
+		draw_colored_polygon(_blob(c, r), WAX_DARK)
+		draw_colored_polygon(_blob(c + Vector2(-0.6, -1.0), r * 0.95), WAX)
+		# la luce sul bordo gonfio, in alto a sinistra
+		draw_arc(c + Vector2(-0.5, -0.5), r * 0.86, PI * 1.02, PI * 1.62, 18, WAX_LIGHT, 2.6, true)
+		draw_arc(c, r * 0.86, PI * 0.1, PI * 0.42, 10, WAX_DARK, 2.2, true)
+		# l'impronta del timbro: un gradino in ombra e il fondo piatto
+		draw_circle(c, r * 0.72, WAX_DARK)
+		draw_circle(c + Vector2(0.4, 0.8), r * 0.67, Color(0.56, 0.06, 0.09))
+		draw_arc(c, r * 0.7, PI * 0.15, PI * 0.8, 18, WAX_LIGHT, 1.4, true)
+
+
 ## Barra a cinque cubetti del carattere di una casata.
 class StatBar:
 	extends Control
-	const CUBE := 21.0
+	const CUBE := 24.0
 	const GAP := 5.0
 	const COLORS := [Color(1.0, 0.76, 0.22), Color(0.86, 0.2, 0.16), Color(0.36, 0.78, 0.32), Color(0.36, 0.62, 0.98)]
 	var value := 0

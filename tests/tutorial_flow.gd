@@ -72,6 +72,8 @@ func wait_step(t: Tutorial, i: int, limit: float) -> bool:
 
 func _run() -> void:
 	out = OS.get_cmdline_user_args()[0]
+	# sempre davanti: macOS non ridisegna una finestra coperta, e il test aspetterebbe per sempre
+	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_ALWAYS_ON_TOP, true)
 	main = (load("res://scenes/main.tscn") as PackedScene).instantiate()
 	root.add_child(main)
 	await frames(5)
@@ -82,7 +84,7 @@ func _run() -> void:
 	await create_timer(1.0).timeout
 	var btn: Button = null
 	for n: Node in main.menu.find_children("*", "Button", true, false):
-		if (n as Button).text.begins_with("Tutorial"):
+		if String(n.name).begins_with("Tutorial"):
 			btn = n
 	check("pulsante Tutorial nel menu", btn != null)
 	main.menu.name_edit.text = "Prova"  # senza nome il gioco non parte
