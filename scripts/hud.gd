@@ -5,6 +5,7 @@ extends CanvasLayer
 const POWER_GLYPHS := ["parmigiano", "vino", "terremoto", "scudo", "mucche"]
 const CARD_W := 140.0
 const CARD_H := 54.0
+const SALE_COLOR := Color(0.62, 1.0, 0.55)  # prezzi in saldo
 const HINT_LIFE := 7.0
 
 var game: Node
@@ -1385,6 +1386,14 @@ func paper_status(done: int, total: int) -> void:
 		_paper_who.text = "Hanno letto in %d su %d" % [done, total]
 
 
+## Secondi di saldi rimasti alla mia casata (Prendi 2 paghi 1), 0 se non ci sono.
+func _sale_left() -> int:
+	if game.my_house < 0:
+		return 0
+	var row: Array = game.state[1][game.my_house]
+	return int(row[12]) if row.size() > 12 else 0
+
+
 func _update_special() -> void:
 	var row: Array = game.state[1][game.my_house]
 	var left: int = row[-2]
@@ -1400,6 +1409,9 @@ func _update_special() -> void:
 		special_glyph.queue_redraw()
 	special_btn.disabled = left > 0
 	special_cd.text = str(left) if left > 0 else ""
+	var sale := _sale_left()
+	special_name.text = ("Saldi %ds" % sale) if sale > 0 else String(pw.short)
+	special_name.add_theme_color_override("font_color", SALE_COLOR if sale > 0 else UiStyle.INK)
 	if special_glyph.dim != (left > 0):
 		special_glyph.dim = left > 0
 		special_glyph.queue_redraw()
@@ -1927,19 +1939,23 @@ func _refresh_castle(cid: int) -> void:
 	var g: int = game.gold()
 	var church: bool = game.has_shop(Defs.B_CHIESA)
 	var at_cap := _my_troops_and_queue() >= Defs.HOUSE_UNIT_CAP
+	var sale := _sale_left()
 	for t in recruit_btns.size():
-		var cost: int = Defs.UNITS[t].cost
-		var can := g >= ceili(cost * (0.5 if int(game.state[1][game.my_house][-1]) == 1 else 1.0)) and (t != Defs.FRATE or church) and not at_cap
-		recruit_btns[t].disabled = not can
 		var d: Dictionary = Defs.UNITS[t]
+		var cost: int = ceili(float(d.cost) * 0.5) if sale > 0 else int(d.cost)
+		var can := g >= cost and (t != Defs.FRATE or church) and not at_cap
+		recruit_btns[t].disabled = not can
 		var tip := "%s: %d fiorini\n%s\nVita %d · Velocità %d" % [d.name, d.cost, d.desc, d.hp, int(d.speed)]
+		if sale > 0:
+			tip = "%s: %d fiorini invece di %d, saldi ancora per %d secondi\n%s\nVita %d · Velocità %d" % [d.name, cost, d.cost, sale, d.desc, d.hp, int(d.speed)]
+		recruit_cost[t].text = ("%d -50%%" % cost) if sale > 0 else str(cost)
 		if at_cap:
 			tip += "\nLimite di %d truppe raggiunto" % Defs.HOUSE_UNIT_CAP
 		elif t == Defs.FRATE and not church:
 			tip += "\nServe una chiesa: costruiscila dalla scheda Costruzioni"
 		if recruit_btns[t].tooltip_text != tip:
 			recruit_btns[t].tooltip_text = tip
-		recruit_cost[t].add_theme_color_override("font_color", UiStyle.GOLD if can else UiStyle.DANGER_TEXT)
+		recruit_cost[t].add_theme_color_override("font_color", (SALE_COLOR if sale > 0 else UiStyle.GOLD) if can else UiStyle.DANGER_TEXT)
 	var mg: float = c[5]
 	var ol: float = c[6]
 	(def_btns["mangano"] as Button).disabled = mg > 0.0

@@ -707,6 +707,7 @@ func _stat(team: int, stat: int) -> float:
 
 # ---------------------------------------------------------------- il potere scemo di ogni casata
 const SPECIAL_CD := 90.0
+const DISCOUNT_T := 25.0  # Prendi 2 paghi 1
 const SPECIAL_R := 34.0
 
 
@@ -822,7 +823,8 @@ func cmd_special(team: int, p: Vector3) -> bool:
 			for u: U in enemies:
 				_take_gold(u.team, team, 12.0)
 		3:
-			h.discount_until = time + 25.0
+			h.discount_until = time + DISCOUNT_T
+			game.msg_house(team, "Saldi! Per %d secondi i soldati costano la metà" % int(DISCOUNT_T), UiStyle.GOLD)
 		4:
 			enemies.sort_custom(func(a: U, b: U) -> bool: return a.pos.distance_squared_to(p) < b.pos.distance_squared_to(p))
 			for k in mini(4, enemies.size()):
@@ -2656,7 +2658,7 @@ func state_array() -> Array:
 		for k in Defs.BUILDING_COUNT:
 			if has_building(hi, k):
 				shops |= 1 << k
-		hs.append([int(h.gold), int(h.faith), cd, h.ai, h.pname, h.alive, snappedf(h.repair_rate, 0.1), shops, snappedf(float(h.faith_rate), 0.01), ceili(maxf(float(taunt_cd[hi]) - time, 0.0)), ceili(maxf(float(h.get("excom_until", 0.0)) - time, 0.0)), -1 if equal_houses else ceili(maxf(float(h.get("sp_t", 0.0)) - time, 0.0)), 1 if float(h.get("discount_until", 0.0)) > time else 0])
+		hs.append([int(h.gold), int(h.faith), cd, h.ai, h.pname, h.alive, snappedf(h.repair_rate, 0.1), shops, snappedf(float(h.faith_rate), 0.01), ceili(maxf(float(taunt_cd[hi]) - time, 0.0)), ceili(maxf(float(h.get("excom_until", 0.0)) - time, 0.0)), -1 if equal_houses else ceili(maxf(float(h.get("sp_t", 0.0)) - time, 0.0)), ceili(maxf(float(h.get("discount_until", 0.0)) - time, 0.0))])
 	var truce: int = ceili(maxf(truce_until - time, 0.0)) if ai_enabled else 0
 	var bs: Array = []
 	for b: Dictionary in buildings:
