@@ -16,6 +16,8 @@ static var fullscreen := false
 static var difficulty := 1
 static var equal_houses := false
 static var player_name := ""
+## Storia: l'ultima missione vinta (0 = nessuna). Le missioni si aprono una dopo l'altra.
+static var story_done := 0
 static var _loaded := false
 
 
@@ -31,6 +33,7 @@ static func load_all() -> void:
 		difficulty = clampi(int(cf.get_value("partita", "difficolta", difficulty)), 0, DIFFS.size() - 1)
 		equal_houses = bool(cf.get_value("partita", "casate_uguali", equal_houses))
 		player_name = String(cf.get_value("partita", "nome", player_name))
+		story_done = clampi(int(cf.get_value("storia", "vinte", story_done)), 0, Campaign.MISSIONS.size())
 	apply()
 
 
@@ -42,6 +45,7 @@ static func save_all() -> void:
 	cf.set_value("partita", "difficolta", difficulty)
 	cf.set_value("partita", "casate_uguali", equal_houses)
 	cf.set_value("partita", "nome", player_name)
+	cf.set_value("storia", "vinte", story_done)
 	cf.save(PATH)
 
 

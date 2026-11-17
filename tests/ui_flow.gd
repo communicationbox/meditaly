@@ -24,6 +24,15 @@ func check(name_: String, ok: bool) -> void:
 		fails += 1
 
 
+## Senza finestra Input.parse_input_event non arriva a nessuno: l'evento va consegnato alla vista,
+## in coordinate della vista (la finestra finta del headless è 64x64).
+func send(e: InputEvent) -> void:
+	if DisplayServer.get_name() == "headless":
+		root.push_input(e, true)
+	else:
+		Input.parse_input_event(e)
+
+
 func wait_frames(n: int) -> void:
 	for i in n:
 		await process_frame
@@ -34,6 +43,8 @@ func wait_s(s: float) -> void:
 
 
 func shot(n: String) -> void:
+	if DisplayServer.get_name() == "headless":  # senza finestra non si disegna: niente foto
+		return
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("%s/%s.png" % [out, n])
 
@@ -42,7 +53,7 @@ func click(p: Vector2, button := MOUSE_BUTTON_LEFT) -> void:
 	var m := InputEventMouseMotion.new()
 	m.position = p
 	m.global_position = p
-	Input.parse_input_event(m)
+	send(m)
 	root.warp_mouse(p)
 	await wait_frames(2)
 	for pressed: bool in [true, false]:
@@ -56,8 +67,8 @@ func click(p: Vector2, button := MOUSE_BUTTON_LEFT) -> void:
 			var back := InputEventMouseMotion.new()
 			back.position = p
 			back.global_position = p
-			Input.parse_input_event(back)
-		Input.parse_input_event(e)
+			send(back)
+		send(e)
 		await wait_frames(2)
 
 
@@ -67,7 +78,7 @@ func drag_power(a: Vector2, b: Vector2) -> void:
 		var m := InputEventMouseMotion.new()
 		m.position = step[0]
 		m.global_position = step[0]
-		Input.parse_input_event(m)
+		send(m)
 		await wait_frames(3)
 		if step[1]:
 			var d := InputEventMouseButton.new()
@@ -76,20 +87,20 @@ func drag_power(a: Vector2, b: Vector2) -> void:
 			d.global_position = step[0]
 			d.pressed = true
 			d.button_mask = MOUSE_BUTTON_MASK_LEFT
-			Input.parse_input_event(d)
+			send(d)
 			await wait_frames(3)
 	await wait_frames(3)
 	await shot("ui_mira_trascina")
 	var last := InputEventMouseMotion.new()
 	last.position = b
 	last.global_position = b
-	Input.parse_input_event(last)
+	send(last)
 	var u := InputEventMouseButton.new()
 	u.button_index = MOUSE_BUTTON_LEFT
 	u.position = b
 	u.global_position = b
 	u.pressed = false
-	Input.parse_input_event(u)
+	send(u)
 	await wait_frames(3)
 
 
@@ -101,7 +112,7 @@ func key_it_minus() -> void:
 		e.keycode = KEY_MINUS
 		e.unicode = 45
 		e.pressed = pressed
-		Input.parse_input_event(e)
+		send(e)
 		await wait_frames(2)
 
 
@@ -111,12 +122,15 @@ func key(k: Key) -> void:
 		e.physical_keycode = k
 		e.keycode = k
 		e.pressed = pressed
-		Input.parse_input_event(e)
+		send(e)
 		await wait_frames(2)
 
 
 func _run() -> void:
 	out = OS.get_cmdline_user_args()[0]
+	Game.force_view = true  # senza finestra la partita creerebbe solo la simulazione
+	if DisplayServer.get_name() == "headless":
+		root.size = Vector2i(1600, 900)  # la finestra finta è 64x64: lo schermo su cui sono tarati i clic
 	# sempre davanti: macOS non ridisegna una finestra coperta, e il test aspetterebbe per sempre
 	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_ALWAYS_ON_TOP, true)
 	var main: Node = (load("res://scenes/main.tscn") as PackedScene).instantiate()
@@ -147,8 +161,13 @@ func _run() -> void:
 	check("dopo il clic compare la rotella", main.menu._starting)
 	Settings.player_name = ""  # il nome di prova non deve restare nelle impostazioni di chi gioca
 	Settings.save_all()
-	while main.game == null:
+	var t1 := Time.get_ticks_msec()
+	while main.game == null and Time.get_ticks_msec() - t1 < 60000:
 		await process_frame
+	if main.game == null:
+		check("la partita parte entro un minuto", false)
+		quit(1)
+		return
 	await wait_s(1.0)
 	var g: Game = main.game
 	check("clic sul menu avvia la partita", g != null and g.welcome_done)
@@ -161,6 +180,7 @@ func _run() -> void:
 	check("il castello di partenza è indicato", c.home_castle == 5 and g.hud.rings[5].visible and g.hud.labels[5].text.contains("IL TUO CASTELLO"))
 	check("gli altri castelli non hanno il segno", not g.hud.rings[4].visible and not g.hud.labels[4].text.contains("IL TUO"))
 	var sim: Sim = g.sim
+	sim.equal_houses = false  # l'opzione «casate uguali» di chi gioca toglierebbe il potere della casata
 	var hud: Hud = g.hud
 	# recluta con il pulsante dell'interfaccia
 	var gold0: int = int(sim.houses[4].gold)
@@ -179,17 +199,17 @@ func _run() -> void:
 	var dn := InputEventMouseButton.new()
 	dn.button_index = MOUSE_BUTTON_LEFT
 	dn.position = a; dn.global_position = a; dn.pressed = true
-	Input.parse_input_event(dn)
+	send(dn)
 	await wait_frames(2)
 	var mv := InputEventMouseMotion.new()
 	mv.position = b; mv.global_position = b; mv.button_mask = MOUSE_BUTTON_MASK_LEFT
-	Input.parse_input_event(mv)
+	send(mv)
 	await wait_frames(2)
 	await shot("ui_riquadro")
 	var up := InputEventMouseButton.new()
 	up.button_index = MOUSE_BUTTON_LEFT
 	up.position = b; up.global_position = b; up.pressed = false
-	Input.parse_input_event(up)
+	send(up)
 	await wait_frames(3)
 	check("riquadro seleziona proprie truppe (%d)" % sel.size(), sel.size() > 0)
 	var all_mine := true
@@ -238,8 +258,8 @@ func _run() -> void:
 	sim.houses[4].faith = 150.0
 	sim.houses[4].all_shops = true
 	await wait_shops(hud.game)  # lo sblocco arriva all'interfaccia con lo stato successivo
-	await key(KEY_1)
-	check("tasto 1 arma il potere", c.pending.get("kind", "") == "power" and c.pending.get("id", -1) == Defs.P_PARMIGIANO)
+	await key(KEY_Z)
+	check("tasto Z arma il potere", c.pending.get("kind", "") == "power" and c.pending.get("id", -1) == Defs.P_PARMIGIANO)
 	await wait_frames(3)
 	await shot("ui_mira")
 	await click(Vector2(800, 300))
@@ -248,9 +268,12 @@ func _run() -> void:
 	sim.wheels.clear()
 	sim.houses[4].cd[Defs.P_PARMIGIANO] = 0.0
 	sim.houses[4].faith = 150.0
-	await key(KEY_1)
+	await key(KEY_Z)
 	await drag_power(Vector2(700, 380), Vector2(1000, 380))
-	check("trascinando parte la forma col vettore scelto", sim.wheels.size() == 1 and c.pending.is_empty() and absf((sim.wheels[0].vel as Vector3).length() - 34.0) > 0.5)
+	if DisplayServer.get_name() == "headless":  # senza finestra Godot non sa dove sia il mouse: il vettore non si vede
+		check("trascinando parte la forma", sim.wheels.size() == 1 and c.pending.is_empty())
+	else:
+		check("trascinando parte la forma col vettore scelto", sim.wheels.size() == 1 and c.pending.is_empty() and absf((sim.wheels[0].vel as Vector3).length() - 34.0) > 0.5)
 	await wait_s(0.2)
 	await wait_s(1.0)
 	await shot("ui_forma")
@@ -285,9 +308,9 @@ func _run() -> void:
 	await wait_s(0.3)
 	check("finito l'evento l'icona sparisce", hud.event_icons.is_empty())
 	check("la casata ha il suo potere nella barra", hud.special_btn.visible and hud.special_name.text == "Mazzetta")
-	await key(KEY_X)
+	await key(KEY_F)
 	await wait_frames(2)
-	check("X arma il potere della casata", c.pending.get("kind", "") == "special")
+	check("F arma il potere della casata", c.pending.get("kind", "") == "special")
 	await shot("ui_potere")
 	await click(Vector2(800, 300), MOUSE_BUTTON_RIGHT)
 	check("clic destro annulla il potere", c.pending.is_empty())

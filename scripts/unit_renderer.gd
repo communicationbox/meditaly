@@ -65,7 +65,17 @@ void fragment() {
 """
 
 const BOAT := Defs.UNIT_TYPES
-const MAX_PER := 700
+const MAX_PER := 2000
+## Squadre: fanti e balestrieri si vedono in tre, i cavalieri in due. È solo grafica: per vita, danni,
+## costo e rete resta un'unità sola. I compagni cadono man mano che la vita scende.
+## Posizioni dei compagni rispetto al capofila (x di lato, z in avanti).
+const SQUAD := {
+	Defs.FANTE: [Vector2(-0.85, -0.75), Vector2(0.85, -0.75)],
+	Defs.BALESTRIERE: [Vector2(-0.85, -0.75), Vector2(0.85, -0.75)],
+	Defs.CAVALIERE: [Vector2(1.1, -1.5)],
+}
+## Oltre questa distanza della telecamera i compagni sono più piccoli di un pixel: non si disegnano.
+const SQUAD_FAR := 150.0
 
 var game: Node
 var mm: Array[MultiMesh] = []
@@ -225,7 +235,24 @@ func _process(_dt: float) -> void:
 		var attack := 1.0 if (u.flags & 2) != 0 else 0.0
 		var drunk := 10.0 if (u.flags & 8) != 0 else 0.0
 		mu.set_instance_custom_data(c, Color(u.phase, moving, attack, float(u.team) + drunk))
-		counts[bucket] = c + 1
+		c += 1
+		# i compagni di squadra: niente in barca né sulle mura, e solo dove c'è terreno per stare in piedi
+		if not water and (u.flags & 32) == 0 and cdist < SQUAD_FAR and SQUAD.has(u.type):
+			var offs: Array = SQUAD[u.type]
+			var alive := mini(offs.size(), ceili(u.hp * (offs.size() + 1)) - 1)
+			for k in alive:
+				if c >= MAX_PER:
+					break
+				var o: Vector2 = offs[k]
+				var fp := p + bas.x * o.x + bas.z * o.y
+				var fy: float = game.world.walk_y(fp.x, p.y + 0.5, fp.z, true)
+				if absf(fy - p.y) > 1.2:
+					continue  # muro, dirupo o porta stretta: il compagno si stringe dietro al capofila
+				fp.y = lerpf(fy, p.y, 0.5)
+				mu.set_instance_transform(c, Transform3D(bas, fp))
+				mu.set_instance_custom_data(c, Color(u.phase + 1.9 * (k + 1), moving, attack, float(u.team) + drunk))
+				c += 1
+		counts[bucket] = c
 		var tcol: Color = Defs.HOUSES[u.team].color
 		var mine: bool = u.team == game.my_house
 		if pip_a > 0.0 and pips < 1798 and cam:
@@ -248,8 +275,9 @@ func _process(_dt: float) -> void:
 			pips += 1
 		var is_sel: bool = selected.has(u.id)
 		if is_sel and rings < 800:
-			var size := 1.0 if u.type < Defs.CAVALIERE else (1.5 if u.type == Defs.CAVALIERE else 2.6)
-			ring_mm.set_instance_transform(rings, Transform3D(Basis().scaled(Vector3(size, 0.5, size)), p + Vector3(0, 0.15, 0)))
+			var size := 1.5 if u.type < Defs.CAVALIERE else (1.9 if u.type == Defs.CAVALIERE else 2.6)
+			var rc := p - bas.z * (0.4 if SQUAD.has(u.type) and (u.flags & 36) == 0 else 0.0)  # al centro della squadra
+			ring_mm.set_instance_transform(rings, Transform3D(Basis().scaled(Vector3(size, 0.5, size)), rc + Vector3(0, 0.15, 0)))
 			ring_mm.set_instance_color(rings, Color(0.4, 1.0, 0.4) if u.team == game.my_house else Color(1, 0.3, 0.3))
 			rings += 1
 		if u.hp < 0.995 and bars < 396 and cam:

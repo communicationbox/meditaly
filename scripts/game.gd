@@ -25,6 +25,7 @@ var fx: Fx
 var hud: Hud
 var ctrl: Controller
 var tutorial: Tutorial
+var mission: Mission
 var _test_t := 0.0
 var _hash_ok := 0
 var _hash_fail := 0
@@ -194,8 +195,12 @@ func _create_sim() -> void:
 	state = sim.state_array()
 
 
+## Solo per i test senza finestra: crea lo stesso telecamera, interfaccia e soldati disegnati.
+static var force_view := false
+
+
 func _enter_game() -> void:
-	is_view = DisplayServer.get_name() != "headless"
+	is_view = DisplayServer.get_name() != "headless" or force_view
 	world.build_all_blocking()
 	welcome_done = true
 	if not is_view:
@@ -214,6 +219,11 @@ func _enter_game() -> void:
 	hud = Hud.new()
 	add_child(hud)
 	hud.setup(self)
+	var mi := test_args.find("--missione")
+	if mi >= 0 and mi + 1 < test_args.size() and sim != null:
+		mission = Mission.new()
+		add_child(mission)
+		mission.setup(self, test_args[mi + 1].to_int())
 	if "--tutorial" in test_args:
 		tutorial = Tutorial.new()
 		add_child(tutorial)
@@ -295,6 +305,8 @@ func _exec_cmd(peer: int, kind: String, a: Array) -> void:
 		return
 	if not _args_ok(kind, a):
 		return
+	if not sim.cmd_allowed(team, kind, a):
+		return  # storia: non ancora sbloccato
 	match kind:
 		"recruit": sim.cmd_recruit(team, a[0], a[1])
 		"order": sim.cmd_order(team, a[0], _clamp_p(a[1]), a[2])
@@ -770,6 +782,11 @@ func spot_problem(p: Vector3) -> String:
 	for b: Array in buildings():
 		others.append([b[3], b[4]])
 	return Buildings.check_spot(world, castles, owners, others, my_house, p)
+
+
+## Storia: chi gioca può già usare questa cosa? Fuori dalla storia, o da client in rete, sempre sì.
+func allowed(kind: String, id: Variant = null) -> bool:
+	return sim == null or sim.allowed(my_house, kind, id)
 
 
 func has_shop(type: int) -> bool:

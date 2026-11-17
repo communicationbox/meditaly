@@ -9,6 +9,7 @@ Apri la cartella con Godot 4.7 e premi Play, oppure:
 ```bash
 GODOT="/Applications/Godot 2.app/Contents/MacOS/Godot"
 "$GODOT" --path .                                # menu
+"$GODOT" --path . -- --missione 1                # la storia, dalla missione indicata (1-12)
 "$GODOT" --path . -- --tutorial --house 1        # partita guidata passo passo
 "$GODOT" --path . -- --solo --house 1            # subito contro l'IA
 "$GODOT" --headless --path . -- --server         # server dedicato
@@ -28,13 +29,20 @@ Casate (`--house`): 0 Savoia, 1 Visconti, 2 Serenissima, 3 Doria, 4 Medici, 5 Pa
 | WASD / frecce, mouse sul bordo, rotella | Muovi la vista, zoom |
 | Q / E, tasto centrale | Ruota la vista |
 | Clic sinistro (anche trascinando) | Seleziona truppe o castello |
+| Doppio clic / Ctrl+clic su un soldato | Tutti i soldati di quel tipo sullo schermo |
 | Clic destro | Muovi e attacca. Su un muro nemico, catapulte e bombarde lo bersagliano |
-| T / Spazio | Tutta l'armata, frati esclusi / torna al castello |
-| 1-5 | Poteri, poi clic sul bersaglio |
-| 6-0 | Sfottò agli avversari |
-| G, R, M, O | Sul castello: balestrieri sulle mura, ripara, mangano, olio bollente |
+| T o F2 / Spazio | Tutta l'armata, frati esclusi / torna al castello |
+| Ctrl+1-0 / Maiusc+1-0 / 1-0 | Crea un gruppo (soldati o castello) / aggiungi / riprendilo; due volte porta la vista lì |
+| Backspace (Maiusc: indietro) | Il prossimo tuo castello, selezionato e inquadrato |
+| Z X C V B | Poteri (Parmigiano, Vino, Terremoto, Scudo, Mucche), poi clic sul bersaglio |
+| F | Potere della casata |
+| G, R, M, O | Difesa del castello selezionato: balestrieri sulle mura, ripara, mangano, olio bollente |
 | Esc | Annulla, poi pausa: salva, impostazioni, esci |
 | F1 | Guida ed esci al menu |
+
+### Storia
+
+*L'ascesa del Conte di Borgo Spigolo*: 12 missioni brevi (da 2 a 10 minuti) raccontate dalla Gazzetta del Trecento, che apre e chiude ogni missione. Il Conte (casata blu) parte da Borgo Spigolo, cioè Ancona, con i soli fanti. Ogni missione sblocca un pezzo di gioco e l'interfaccia cresce con lei: ciò che non è ancora sbloccato non si vede e non si comanda. La prima missione insegna a giocare passo passo. Le missioni si aprono una dopo l'altra e restano salvate (`impostazioni.cfg`, sezione `storia`). Testi, sblocchi, preparazione e obiettivi sono in `scripts/campaign.gd`, la logica in `scripts/mission.gd`.
 
 ### Regole
 
@@ -48,9 +56,11 @@ Recluta dal castello con i fiorini, porta l'armata al nemico ed entra nel cortil
 
 **Tregua.** Nei primi minuti le casate non si combattono fra loro: niente scontri fra soldati, le torri non sparano, niente poteri né mangano sulle altre casate, e i loro castelli e botteghe non si attaccano. Le IA in tregua non attaccano nessuno; chi gioca può già prendersi i castelli liberi.
 
-**Si deve ridere.** Ogni tre-quattro minuti, dopo la tregua, arriva un evento a sorpresa con titolone e squillo: la *Sagra della Porchetta* (un banco con il maiale allo spiedo spunta dove c'è più gente in campo e tutti, di ogni casata, mollano la battaglia per mangiare: chi è a tavola non si tocca), lo *Sciopero* (il tipo di soldato più numeroso della casata in testa si siede e non obbedisce), *È pronto in tavola!* (metà armata in campo della casata in testa corre a casa dalla mamma) la *Processione del Patrono* (25 secondi senza poteri per nessuno), il *Palio* (tutti i cavalieri in campo corrono a un traguardo lontano: il primo vince 200 fiorini) e la *Scomunica* (la casata in testa resta senza Fede per 40 secondi). Davanti a una forma di Parmigiano i soldati scappano urlando, dritti davanti alla forma come nei cartoni; chi prende un castello balla. I soldati parlano con i fumetti quando caricano, quando sono feriti, quando sono ubriachi o alla sagra; i frati russano. Con i tasti 6-0 (o i pulsanti sopra la minimappa) si mandano sfottò a tutti, uno ogni 15 secondi; anche l'IA sfotte quando conquista.
+**Si deve ridere.** Ogni tre-quattro minuti, dopo la tregua, arriva un evento a sorpresa con titolone e squillo: la *Sagra della Porchetta* (un banco con il maiale allo spiedo spunta dove c'è più gente in campo e tutti, di ogni casata, mollano la battaglia per mangiare: chi è a tavola non si tocca), lo *Sciopero* (il tipo di soldato più numeroso della casata in testa si siede e non obbedisce), *È pronto in tavola!* (metà armata in campo della casata in testa corre a casa dalla mamma) la *Processione del Patrono* (25 secondi senza poteri per nessuno), il *Palio* (tutti i cavalieri in campo corrono a un traguardo lontano: il primo vince 200 fiorini) e la *Scomunica* (la casata in testa resta senza Fede per 40 secondi). Davanti a una forma di Parmigiano i soldati scappano urlando, dritti davanti alla forma come nei cartoni; chi prende un castello balla. I soldati parlano con i fumetti quando caricano, quando sono feriti, quando sono ubriachi o alla sagra; i frati russano. Con i pulsanti sopra la minimappa si mandano sfottò a tutti, uno ogni 15 secondi; anche l'IA sfotte quando conquista.
 
 **Botteghe e Fede.** Si parte senza niente: chiese e botteghe si costruiscono fuori dalle mura, vicino a un proprio castello (pannello del castello → scheda «Costruzioni», poi clic sul terreno: verde si può, rosso no). Il cantiere cresce strato dopo strato, dalle fondamenta al tetto, come una riparazione. Davanti alle porte e attorno alle mura resta sempre spazio per passare. Ogni potere funziona solo se hai la sua bottega in piedi: Caseificio → Parmigiano, Cantina → Vino, Torre dell'Astrologo → Terremoto, Santuario → Scudo, Stalla → Mucche. Gli edifici restano di chi li ha costruiti e si abbattono: clic destro con i soldati sopra un edificio nemico (fanti e nonne lo prendono a colpi, catapulte e bombarde lo bersagliano), e chi lo perde perde il vantaggio. La Fede arriva solo dalle chiese: ognuna ne dà un po', e ogni frate che le prega davanti (fino a 6) ne aggiunge. Più chiese, più Fede. Sopra ogni edificio c'è la sua insegna col colore del padrone.
+
+**Squadre.** Fanti e balestrieri si vedono in tre, i cavalieri in due: è solo grafica, per vita, danni, costo e rete resta un'unità sola, e i compagni cadono man mano che la vita scende.
 
 **Unità buffe.** Frate (prega, si recluta solo dove c'è la chiesa), Nonna (lenta, col mattarello fortissima), Menestrello (canta così male che i nemici vicini fanno il 30% di danni in meno).
 
@@ -74,7 +84,10 @@ Il server è autoritativo: i client inviano comandi validati e ricevono snapshot
 
 ```bash
 "$GODOT" --headless --path . -s tests/rules.gd        # regole: conquista, vittoria, crateri, riparazioni
-"$GODOT" --path . -s tests/ui_flow.gd -- CARTELLA     # end-to-end con mouse e tastiera sintetici
+"$GODOT" --headless --path . -s tests/campaign.gd     # storia: elenco, giornali, sblocchi missione per missione, vittorie e progressi
+"$GODOT" --headless --path . -s tests/controls.gd     # gruppi, Backspace, tasti dei poteri, squadre, pannello difesa (senza finestra)
+"$GODOT" --headless --path . -s tests/campaign_bot.gd -- 10   # un bot gioca la missione (1-12) a 6x: raduno, arieti, poteri
+"$GODOT" --headless --path . -s tests/ui_flow.gd -- CARTELLA   # end-to-end con mouse e tastiera sintetici (senza finestra niente foto)
 "$GODOT" --path . -s tests/tutorial_flow.gd -- CARTELLA  # il tutorial giocato dall'inizio alla fine
 "$GODOT" --path . -- --demo --shots CARTELLA          # assedio con screenshot e FPS
 tests/net_test.sh                                     # server + 2 client: mondi identici byte per byte

@@ -41,6 +41,7 @@ var recruit_btns: Array[Button] = []
 var recruit_cost: Array[Label] = []
 var def_btns: Dictionary = {}
 var def_lbls: Dictionary = {}
+var def_subs: Dictionary = {}
 var recruit_box: Control
 var def_box: Control
 var build_box: Control
@@ -56,6 +57,10 @@ var build_costs: Array[Label] = []
 var build_glyphs: Array[Glyph] = []
 var power_locks: Array[Glyph] = []
 var special_btn: Button
+## Storia: pezzi d'interfaccia che si vedono solo quando la missione li ha sbloccati.
+var power_board: Control
+var faith_pair: Control
+var taunt_row: Control
 var special_glyph: Glyph
 var special_name: Label
 var special_cd: Label
@@ -160,8 +165,8 @@ func setup(g: Node) -> void:
 	_world_marks()
 	_make_badge_textures()
 	on_state()
-	if not "--demo" in game.test_args:
-		_show_intro()
+	if not "--demo" in game.test_args and not "--missione" in game.test_args:
+		_show_intro()  # nella storia ci pensa la missione: il Conte non è una casata
 
 
 # ---------------------------------------------------------------- chi sei
@@ -174,7 +179,7 @@ func _top_bar() -> void:
 	var who := Button.new()
 	who.flat = true
 	who.focus_mode = Control.FOCUS_NONE
-	who.tooltip_text = "Vai al tuo castello (Spazio)"
+	who.tooltip_text = "Vai al tuo castello (Spazio). Backspace: passa al prossimo"
 	who.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	who.pressed.connect(func(): game.ctrl.focus_home())
 	who.custom_minimum_size = Vector2(118, 28)
@@ -199,7 +204,8 @@ func _top_bar() -> void:
 	faith_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
 	faith_rate_lbl = UiStyle.label("", 15, UiStyle.MUTED)
 	faith_rate_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
-	h.add_child(_pair(faith_lbl, faith_rate_lbl, "fede"))
+	faith_pair = _pair(faith_lbl, faith_rate_lbl, "fede")
+	h.add_child(faith_pair)
 	castles_lbl = UiStyle.label("", 22, UiStyle.INK, true)
 	castles_lbl.tooltip_text = "Castelli tuoi su quelli della penisola"
 	castles_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -420,14 +426,35 @@ func _castle_panel() -> void:
 	build_menu = PanelContainer.new()  # il vecchio riquadro a parte non c'è più: resta chiuso
 	build_menu.visible = false
 	root.add_child(build_menu)
-	var dg := HBoxContainer.new()
-	dg.add_theme_constant_override("separation", 4)
-	def_box = dg
-	_def_button(dg, "garrison", "mura", "Sulle mura", "G", "I balestrieri vicini salgono sulle mura e tirano più lontano", func(): game.send_cmd("garrison", [game.ctrl.selected_castle]))
-	_def_button(dg, "repair", "ripara", "Ripara", "R", "Ricostruisce ciò che è crollato: 0,5 fiorini per blocco (più lenta sotto attacco)", func(): game.send_cmd("repair", [game.ctrl.selected_castle]))
-	_def_button(dg, "mangano", "mangano", "Mangano", "M", "Tira una pietra dal mastio dove clicchi", func(): game.ctrl.start_action("mangano", game.ctrl.selected_castle))
-	_def_button(dg, "oil", "olio", "Olio", "O", "Olio bollente attorno alle mura: 25 fiorini", func(): game.ctrl.start_action("oil", game.ctrl.selected_castle))
-	v.add_child(dg)
+	# difesa: una sezione a parte, cornice rossa, separata da ciò che serve ad attaccare
+	var dp := PanelContainer.new()
+	dp.add_theme_stylebox_override("panel", UiStyle.panel_box(Color(0.20, 0.10, 0.06), UiStyle.DANGER, 6))
+	var dv := VBoxContainer.new()
+	dv.add_theme_constant_override("separation", 4)
+	dp.add_child(dv)
+	var dh := HBoxContainer.new()
+	dh.add_theme_constant_override("separation", 6)
+	var dt := UiStyle.label("Difesa del castello", 15, UiStyle.DANGER_TEXT, true)
+	dh.add_child(dt)
+	var dn := UiStyle.label("torri, mangano e olio tirano anche da soli", 11, UiStyle.OFF)
+	dn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	dh.add_child(dn)
+	dv.add_child(dh)
+	var dg := GridContainer.new()
+	dg.columns = 2
+	dg.add_theme_constant_override("h_separation", 4)
+	dg.add_theme_constant_override("v_separation", 4)
+	dv.add_child(dg)
+	def_box = dp
+	_def_button(dg, "garrison", "mura", "Sulle mura", "G", "Balestrieri sui merli",
+		"I balestrieri vicini al castello salgono sulle mura: da lassù tirano il 35% più lontano", func(): game.send_cmd("garrison", [game.ctrl.selected_castle]))
+	_def_button(dg, "repair", "ripara", "Ripara le mura", "R", "0,5 fiorini a blocco",
+		"Ricostruisce ciò che è crollato, blocco per blocco: 0,5 fiorini l'uno (più lenta sotto attacco)", func(): game.send_cmd("repair", [game.ctrl.selected_castle]))
+	_def_button(dg, "mangano", "mangano", "Mangano", "M", "Pietra dove clicchi",
+		"Il mangano sul mastio tira un masso dove clicchi. Da solo mira dove i nemici sono ammassati", func(): game.ctrl.start_action("mangano", game.ctrl.selected_castle))
+	_def_button(dg, "oil", "olio", "Olio bollente", "O", "25 fiorini a colata",
+		"Versa olio bollente dalle mura sui nemici che si accalcano sotto: 25 fiorini. Ogni tanto cade anche da solo", func(): game.ctrl.start_action("oil", game.ctrl.selected_castle))
+	v.add_child(dp)
 	root.add_child(castle_panel)
 
 
@@ -516,17 +543,43 @@ func _portrait(t: int, px: int) -> TextureRect:
 	return tr
 
 
-func _def_button(parent: Control, key: String, glyph: String, text: String, hotkey: String, tip_text: String, cb: Callable) -> void:
-	var b := UiStyle.button("", "%s [%s]\n%s" % [text, hotkey, tip_text], cb, 75.0, 30.0)
+const DEF_W := (CARD_W * 3.0 + 8.0 - 12.0 - 4.0) * 0.5
+const DEF_H := 44.0
+
+
+## Un comando di difesa: icona, nome, tasto in alto a destra, e sotto cosa fa o fra quanto è pronto.
+## Riga sotto il nome di un comando di difesa: lo stato se c'è, altrimenti cosa fa.
+func _def_state(key: String, state: String) -> void:
+	var s: Label = def_subs[key]
+	var t: String = state if state != "" else String(s.get_meta("idle"))
+	if s.text != t:
+		s.text = t
+		s.add_theme_color_override("font_color", UiStyle.GOLD if state != "" else UiStyle.MUTED)
+
+
+func _def_button(parent: Control, key: String, glyph: String, text: String, hotkey: String, sub_text: String, tip_text: String, cb: Callable) -> void:
+	var b := UiStyle.button("", "%s [%s]\n%s" % [text, hotkey, tip_text], cb, DEF_W, DEF_H)
 	var g := Glyph.new(glyph)
-	g.position = Vector2(4, 5)
-	g.size = Vector2(20, 20)
+	g.position = Vector2(5, 6)
+	g.size = Vector2(32, 32)
 	b.add_child(g)
-	var k := UiStyle.label(hotkey, 13, UiStyle.MUTED, true)
-	k.position = Vector2(30, 5)
+	var n := UiStyle.label(text, 14, UiStyle.INK, true)
+	n.position = Vector2(42, 2)
+	b.add_child(n)
+	var s := UiStyle.label(sub_text, 11, UiStyle.MUTED)
+	s.position = Vector2(42, 22)
+	s.size = Vector2(DEF_W - 46.0, 18.0)
+	s.clip_text = true
+	s.set_meta("idle", sub_text)
+	b.add_child(s)
+	var k := UiStyle.label(hotkey, 15, UiStyle.GOLD, true)
+	k.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	k.position = Vector2(DEF_W - 26.0, 2)
+	k.size = Vector2(20, 20)
 	b.add_child(k)
 	def_btns[key] = b
 	def_lbls[key] = k
+	def_subs[key] = s
 	parent.add_child(b)
 
 
@@ -562,7 +615,7 @@ func _army_panel() -> void:
 		h.add_child(cell)
 		army_cells.append(cell)
 		army_counts.append(n)
-	army_btn = UiStyle.button("T", "Seleziona tutta l'armata (T)", func(): game.ctrl.select_army(), 30.0, 30.0)
+	army_btn = UiStyle.button("T", "Seleziona tutta l'armata (T o F2)", func(): game.ctrl.select_army(), 30.0, 30.0)
 	army_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(army_btn)
 	root.add_child(army_panel)
@@ -599,6 +652,7 @@ func _bottom_center() -> void:
 	h.add_child(_special_card())
 	board.add_child(h)
 	box.add_child(board)
+	power_board = board
 	root.add_child(box)
 
 
@@ -676,7 +730,7 @@ func _power_card(k: int) -> Button:
 	return b
 
 
-## Il potere della casata: stessa forma degli altri, ma dorato e col tasto X.
+## Il potere della casata: stessa forma degli altri, ma dorato e col tasto F.
 func _special_card() -> Button:
 	special_btn = UiStyle.button("", "", func(): game.ctrl.start_special(), POWER_W, POWER_H)
 	UiStyle.style_button(special_btn, Color(0.74, 0.5, 0.12), UiStyle.OUTLINE, Color(0.86, 0.6, 0.16))
@@ -684,7 +738,7 @@ func _special_card() -> Button:
 	special_glyph.position = Vector2((POWER_W - 48.0) * 0.5, 6)
 	special_glyph.size = Vector2(48, 48)
 	special_btn.add_child(special_glyph)
-	var key := UiStyle.label("X", 20, UiStyle.INK, true)
+	var key := UiStyle.label("F", 20, UiStyle.INK, true)
 	key.position = Vector2(9, 3)
 	special_btn.add_child(key)
 	special_name = UiStyle.label("", 16, UiStyle.INK, true)
@@ -714,7 +768,7 @@ func _minimap_panel() -> void:
 	mp.offset_bottom = -8
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 4)
-	# sfottò per gli amici: tasti 6-0, li leggono tutti
+	# sfottò per gli amici: i numeri servono ai gruppi, si mandano solo da qui. Li leggono tutti
 	var tr := HBoxContainer.new()
 	tr.add_theme_constant_override("separation", 3)
 	var tl := UiStyle.label("Sfottò", 13, UiStyle.GOLD, true)
@@ -722,12 +776,13 @@ func _minimap_panel() -> void:
 	tr.add_child(tl)
 	taunt_lbl = tl
 	for k in Defs.TAUNTS.size():
-		var key := str((k + 6) % 10)
-		var b := UiStyle.button(key, "Sfottò [%s]: «%s»\nLo leggono tutti. Uno ogni %d secondi" % [key, Defs.TAUNTS[k], int(Sim.TAUNT_CD)], func(): game.send_cmd("taunt", [k]), 24.0, 22.0)
+		var key: String = ["I", "II", "III", "IV", "V"][k]
+		var b := UiStyle.button(key, "Sfottò: «%s»\nLo leggono tutti. Uno ogni %d secondi" % [Defs.TAUNTS[k], int(Sim.TAUNT_CD)], func(): game.send_cmd("taunt", [k]), 24.0, 22.0)
 		b.add_theme_font_size_override("font_size", 12)
 		tr.add_child(b)
 		taunt_btns.append(b)
 	col.add_child(tr)
+	taunt_row = tr
 	col.add_child(minimap)
 	mp.add_child(col)
 	root.add_child(mp)
@@ -800,8 +855,11 @@ Vince chi prende tutti i castelli d'Italia.""", 16))
 Q / E o tasto centrale: ruota la vista    Spazio: torna al tuo castello
 Clic sinistro: seleziona, anche trascinando un riquadro
 Clic destro: manda i selezionati. Su un muro nemico, catapulte e bombarde lo colpiscono
-1-5: poteri     X: potere della casata     6-0: sfottò agli avversari          T: tutta l'armata          H: nascondi l'interfaccia
-Con un tuo castello selezionato: G mura, R ripara, M mangano, O olio""", 15, UiStyle.INK))
+Doppio clic o Ctrl+clic su un soldato: tutti quelli del suo tipo sullo schermo          T o F2: tutta l'armata
+Ctrl+1-0: crea un gruppo (soldati o castello)     Maiusc+1-0: aggiungi     1-0: riprendilo, due volte per andarci
+Backspace: il prossimo tuo castello (Maiusc+Backspace: il precedente)          H: nascondi l'interfaccia
+Poteri: Z Parmigiano  X Vino  C Terremoto  V Scudo  B Mucche     F: potere della casata
+Difesa, con un tuo castello selezionato: G balestrieri sulle mura, R ripara, M mangano, O olio bollente""", 15, UiStyle.INK))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	row.add_child(UiStyle.button("Esci al menu", "Abbandona la partita", func(): game.get_parent().call_deferred("back_to_menu"), 180.0))
@@ -866,7 +924,7 @@ func _build_pause() -> void:
 	kick.add_theme_font_override("font", fv)
 	kick.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(kick)
-	var hn := UiStyle.label(String(Defs.HOUSES[game.my_house].name) if game.my_house >= 0 else "Pausa", 34, UiStyle.GOLD, true)
+	var hn := UiStyle.label(_display_name(game.my_house) if game.my_house >= 0 and not game.state.is_empty() else "Pausa", 34, UiStyle.GOLD, true)
 	hn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(hn)
 	if game.my_house >= 0:
@@ -1241,7 +1299,9 @@ var _paper_tw: Tween
 
 ## Quando parte un evento il gioco si ferma per tutti e arriva la Gazzetta: l'evento in prima
 ## pagina con la miniatura, e qualche notizia di cui si legge solo il titolo.
-func newspaper(ev: int, title: String, sub: String, picks: PackedInt32Array) -> void:
+## story: la prima pagina della storia. side = titoletti scritti a mano, buttons = [[testo, Callable], …]:
+## niente conto alla rovescia, si chiude solo con un pulsante.
+func newspaper(ev: int, title: String, sub: String, picks: PackedInt32Array, story: Dictionary = {}) -> void:
 	_close_paper()
 	var veil := ColorRect.new()
 	veil.color = Color(0.03, 0.02, 0.01, 0.62)
@@ -1312,7 +1372,8 @@ func newspaper(ev: int, title: String, sub: String, picks: PackedInt32Array) -> 
 	var sub_l := _ink(sub, 23, PAPER_RED)
 	sub_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	title_col.add_child(sub_l)
-	var path := "res://assets/ui/mini/%s.svg" % MINIATURES[clampi(ev, 0, MINIATURES.size() - 1)]
+	var mini: String = String(story.get("mini", "")) if not story.is_empty() else String(MINIATURES[clampi(ev, 0, MINIATURES.size() - 1)])
+	var path := "res://assets/ui/mini/%s.svg" % mini
 	if ResourceLoader.exists(path):
 		var pic := TextureRect.new()
 		pic.texture = load(path)
@@ -1325,8 +1386,9 @@ func newspaper(ev: int, title: String, sub: String, picks: PackedInt32Array) -> 
 	side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	side.add_theme_constant_override("separation", 10)
 	cols.add_child(side)
-	for k: int in picks:
-		var h := _ink(String(News.HEADLINES[k]), 23, PAPER_INK)
+	var heads: Array = story.get("side", []) if not story.is_empty() else Array(picks).map(func(k: int): return News.HEADLINES[k])
+	for line: String in heads:
+		var h := _ink(line, 23, PAPER_INK)
 		h.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		h.custom_minimum_size = Vector2(320, 0)
 		side.add_child(h)
@@ -1349,7 +1411,22 @@ func newspaper(ev: int, title: String, sub: String, picks: PackedInt32Array) -> 
 	foot.add_child(bar)
 	_paper_who = _ink("", 19, PAPER_RED)
 	foot.add_child(_paper_who)
-	if game.my_house >= 0:  # chi ospita senza giocare non ha nulla da girare
+	if not story.is_empty():
+		bar.visible = false
+		foot.alignment = BoxContainer.ALIGNMENT_END
+		foot.add_theme_constant_override("separation", 12)
+		var first := true
+		for bt: Array in story.get("buttons", []):
+			var sb2 := UiStyle.button(String(bt[0]), "", bt[1], 230.0, 46.0)
+			if first:  # il primo è quello che si preme di solito: dorato come «Volta pagina»
+				UiStyle.style_button(sb2, Color(1.0, 0.76, 0.22), UiStyle.OUTLINE, Color(1.0, 0.86, 0.38))
+				for kk: String in ["font_color", "font_hover_color", "font_pressed_color"]:
+					sb2.add_theme_color_override(kk, PAPER_INK)
+			sb2.add_theme_font_size_override("font_size", 22)
+			sb2.name = String(bt[0])
+			foot.add_child(sb2)
+			first = false
+	elif game.my_house >= 0:  # chi ospita senza giocare non ha nulla da girare
 		var cont := UiStyle.button("Volta pagina", "Riparte quando hanno girato pagina tutti", _resume_paper, 210.0, 46.0)
 		UiStyle.style_button(cont, Color(1.0, 0.76, 0.22), UiStyle.OUTLINE, Color(1.0, 0.86, 0.38))
 		for kk: String in ["font_color", "font_hover_color", "font_pressed_color", "font_disabled_color"]:
@@ -1365,8 +1442,9 @@ func newspaper(ev: int, title: String, sub: String, picks: PackedInt32Array) -> 
 	_paper_tw = create_tween()
 	_paper_tw.tween_property(page, "scale", Vector2.ONE, 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_paper_tw.parallel().tween_property(page, "rotation", -0.012, 0.55).set_ease(Tween.EASE_OUT)
-	_paper_tw.parallel().tween_property(bar, "value", 0.0, Sim.NEWS_TIME)
-	_paper_tw.tween_callback(_close_paper).set_delay(Sim.NEWS_TIME - 0.55)
+	if story.is_empty():
+		_paper_tw.parallel().tween_property(bar, "value", 0.0, Sim.NEWS_TIME)
+		_paper_tw.tween_callback(_close_paper).set_delay(Sim.NEWS_TIME - 0.55)
 	if game.fx and game.fx.sfx and game.ctrl and game.ctrl.cam:
 		game.fx.sfx.play("horn", game.ctrl.cam.global_position, 2.0, 0.0)
 
@@ -1397,14 +1475,14 @@ func _sale_left() -> int:
 func _update_special() -> void:
 	var row: Array = game.state[1][game.my_house]
 	var left: int = row[-2]
-	special_btn.visible = left >= 0
-	if left < 0:
+	special_btn.visible = left >= 0 and game.allowed("special")
+	if not special_btn.visible:
 		return
 	var pw: Dictionary = Defs.HOUSE_POWERS[game.my_house]
 	if special_glyph.kind != String(pw.icon):
 		special_glyph.kind = pw.icon
 		special_name.text = pw.short
-		special_btn.tooltip_text = "[X] %s\n%s\nUno ogni %d secondi%s" % [pw.name, pw.desc, int(Sim.SPECIAL_CD),
+		special_btn.tooltip_text = "[F] %s\n%s\nUno ogni %d secondi%s" % [pw.name, pw.desc, int(Sim.SPECIAL_CD),
 			"\nChi difende il suo re in pericolo non ci casca" if game.my_house in Defs.DUTY_POWERS else ""]
 		special_glyph.queue_redraw()
 	special_btn.disabled = left > 0
@@ -1415,6 +1493,10 @@ func _update_special() -> void:
 	if special_glyph.dim != (left > 0):
 		special_glyph.dim = left > 0
 		special_glyph.queue_redraw()
+
+
+func close_paper() -> void:
+	_close_paper()
 
 
 func _close_paper() -> void:
@@ -1596,7 +1678,7 @@ func on_state() -> void:
 		var excom: int = int(me_row[10]) if me_row.size() > 10 else 0
 		if excom > 0:
 			faith_rate_lbl.text = "scomunicati %ds" % excom
-		faith_lbl.tooltip_text = ("Fede +%.1f/s da chiese e frati che pregano. Serve per i poteri (tasti 1-5)" % fr) if fr > 0.0 else "Niente Fede: costruisci una chiesa e recluta frati che le preghino accanto"
+		faith_lbl.tooltip_text = ("Fede +%.1f/s da chiese e frati che pregano. Serve per i poteri (tasti Z X C V B)" % fr) if fr > 0.0 else "Niente Fede: costruisci una chiesa e recluta frati che le preghino accanto"
 		castles_lbl.text = "%d/%d" % [mine, cs.size()]
 		troops_lbl.text = "%d/%d" % [units, Defs.HOUSE_UNIT_CAP]
 		troops_lbl.add_theme_color_override("font_color", UiStyle.DANGER_TEXT if units >= Defs.HOUSE_UNIT_CAP else UiStyle.INK)
@@ -1639,10 +1721,13 @@ func _update_rank(counts: Dictionary, hs: Array) -> void:
 		(r.shield as UiStyle.Shield).color = Defs.HOUSES[t].color if n > 0 else Color(0.3, 0.28, 0.26)
 		(r.shield as UiStyle.Shield).edge = UiStyle.GOLD if t == game.my_house else Color(0, 0, 0, 0.5)
 		(r.shield as Control).queue_redraw()
+		# storia: si vede solo chi è in gioco in questa missione (il Conte e i nemici col loro nome buffo)
+		var story: bool = game.mission != null
+		(r.row as Control).visible = not story or t == game.my_house or n > 0 or String(hs[t][4]) != ""
 		var nm: String = _display_name(t)
 		if t == game.my_house:
 			nm += " (tu)"
-		elif not hs[t][3]:
+		elif not hs[t][3] and not story:
 			nm += " (giocatore)"
 		(r.row as Control).tooltip_text = "%s: %s" % [nm, ("%d castell%s" % [n, "o" if n == 1 else "i"]) if n > 0 else "caduta"]
 		(r.count as Label).text = str(n) if n > 0 else "-"
@@ -1932,11 +2017,22 @@ func _refresh_castle(cid: int) -> void:
 			if slot.visible:
 				queue_pics[k].texture = recruit_pics[int(q[k])].texture
 				slot.tooltip_text = String(Defs.UNITS[int(q[k])].name)
-	tab_bar.visible = mine
+	# storia: la scheda Costruzioni c'è solo se c'è qualcosa da costruire
+	var any_build := false
+	for k in build_btns.size():
+		build_btns[k].visible = game.allowed("build", k)
+		any_build = any_build or build_btns[k].visible
+	if not any_build and castle_tab == 1:
+		_set_tab(0)
+	tab_bar.visible = mine and any_build
 	recruit_box.visible = mine and castle_tab == 0
 	build_box.visible = mine and castle_tab == 1
 	build_hint.visible = mine and castle_tab == 1
-	def_box.visible = mine
+	var any_def := false
+	for k: String in def_btns:
+		(def_btns[k] as Control).visible = game.allowed("defense", k)
+		any_def = any_def or (def_btns[k] as Control).visible
+	def_box.visible = mine and any_def
 	for k in tab_btns.size():
 		tab_btns[k].set_pressed_no_signal(k == castle_tab)
 	enemy_hint.visible = not mine
@@ -1948,6 +2044,7 @@ func _refresh_castle(cid: int) -> void:
 	var at_cap := _my_troops_and_queue() >= Defs.HOUSE_UNIT_CAP
 	var sale := _sale_left()
 	for t in recruit_btns.size():
+		recruit_btns[t].visible = game.allowed("unit", t)
 		var d: Dictionary = Defs.UNITS[t]
 		var cost: int = ceili(float(d.cost) * 0.5) if sale > 0 else int(d.cost)
 		var can := g >= cost and (t != Defs.FRATE or church) and not at_cap
@@ -1966,10 +2063,10 @@ func _refresh_castle(cid: int) -> void:
 	var mg: float = c[5]
 	var ol: float = c[6]
 	(def_btns["mangano"] as Button).disabled = mg > 0.0
-	(def_lbls["mangano"] as Label).text = "%ds" % ceili(mg) if mg > 0.0 else "M"
+	_def_state("mangano", "Pronto fra %d s" % ceili(mg) if mg > 0.0 else "")
 	(def_btns["oil"] as Button).disabled = ol > 0.0 or g < 25
-	(def_lbls["oil"] as Label).text = "%ds" % ceili(ol) if ol > 0.0 else "O"
-	(def_lbls["repair"] as Label).text = "in corso" if c[4] else "R"
+	_def_state("oil", ("Pronto fra %d s" % ceili(ol)) if ol > 0.0 else ("Servono 25 fiorini" if g < 25 else ""))
+	_def_state("repair", "Lavori in corso…" if c[4] else "")
 	# schede delle botteghe: quante ne hai, se te le puoi permettere
 	var have: Array[int] = []
 	have.resize(Defs.BUILDING_COUNT)
@@ -2082,6 +2179,14 @@ func _refresh_hint(cid: int, has_units: bool) -> void:
 func _refresh_powers() -> void:
 	if game.state.is_empty() or game.my_house < 0:
 		return
+	# storia: si vedono solo i poteri sbloccati; senza poteri né potere della casata la barra sparisce
+	var any_power := false
+	for k in power_btns.size():
+		power_btns[k].visible = game.allowed("power", k)
+		any_power = any_power or power_btns[k].visible
+	power_board.visible = any_power or special_btn.visible
+	faith_pair.visible = game.allowed("faith")
+	taunt_row.visible = game.allowed("taunts")
 	var hcd: Array = game.state[1][game.my_house][2]
 	var fa: int = game.faith()
 	for k in power_btns.size():

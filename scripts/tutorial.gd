@@ -29,6 +29,10 @@ var start_focus := Vector3.ZERO
 var start_zoom := 0.0
 var step_time := 0.0
 var reinforce_t := 0.0
+## Storia, missione 1: solo i passi dei fanti, il bersaglio lo sceglie la missione e alla fine
+## non si accende l'IA (vince o perde la missione).
+var story := false
+var story_target := -1
 
 
 func setup(g: Node) -> void:
@@ -38,11 +42,17 @@ func setup(g: Node) -> void:
 	ctrl = g.ctrl
 	house = g.my_house
 	layer = 5
-	sim.ai_enabled = false
-	sim.houses[house].gold = maxf(float(sim.houses[house].gold), 300.0)
 	home = g.castles[ctrl.selected_castle]
-	target = _nearest_neutral()
+	if story:
+		home = g.castles[Campaign.HOME_CASTLE]
+		target = g.castles[story_target]
+	else:
+		sim.ai_enabled = false
+		sim.houses[house].gold = maxf(float(sim.houses[house].gold), 300.0)
+		target = _nearest_neutral()
 	_build_ui()
+	if story:
+		skip_btn.text = "Niente suggerimenti"
 	_build_beam()
 	steps = [
 		{"title": "Benvenuto, Signore!", "text": "Il tuo castello è %s: è quello con l'anello dorato e la scritta IL TUO CASTELLO.\n\nIl tuo scopo è conquistare tutti i castelli d'Italia. Ti guido io, un passo alla volta: durante il tutorial nessuno ti attacca." % home.name, "manual": true},
@@ -52,11 +62,14 @@ func setup(g: Node) -> void:
 		{"title": "Muovili", "text": "Ora fai CLIC DESTRO su un punto del prato.\nI soldati selezionati ci vanno da soli.\n\nSe hai perso la selezione, premi di nuovo T.", "done": _done_move},
 		{"title": "All'attacco!", "text": "%s è un castello senza padrone: è il bersaglio più facile.\n\nFai CLIC DESTRO sul cerchio che lampeggia sulla mappa in basso a destra.\nSe hai perso la selezione, premi prima T." % target.name, "done": _done_attack, "mark_map": true},
 		{"title": "In marcia", "text": "I tuoi soldati stanno andando a %s. La vista li segue da sola.\n\nAspetta che arrivino." % target.name, "done": _done_march, "tick": _tick_march},
-		{"title": "Un potere speciale", "text": "Ora il divertimento. Accanto al tuo castello è appena nato un caseificio: ogni potere ha bisogno della sua bottega (le costruisci fuori dalle mura dal pannello del castello).\n\nClicca il riquadro che lampeggia (o premi il tasto 1), poi fai CLIC SINISTRO sul castello: arriva una forma di Parmigiano gigante.\n\nIn partita puoi anche tenere premuto e trascinare: la freccia decide direzione e potenza.", "enter": _enter_power, "done": _done_power, "mark": _mark_power},
+		{"title": "Un potere speciale", "text": "Ora il divertimento. Accanto al tuo castello è appena nato un caseificio: ogni potere ha bisogno della sua bottega (le costruisci fuori dalle mura dal pannello del castello).\n\nClicca il riquadro che lampeggia (o premi il tasto Z), poi fai CLIC SINISTRO sul castello: arriva una forma di Parmigiano gigante.\n\nIn partita puoi anche tenere premuto e trascinare: la freccia decide direzione e potenza.", "enter": _enter_power, "done": _done_power, "mark": _mark_power},
 		{"title": "Conquista il castello", "text": "", "text_fn": _capture_text, "done": _done_capture, "tick": _tick_capture},
 		{"title": "Difendi i tuoi castelli", "text": "Quando ti attaccano, seleziona il castello e usa i pulsanti che lampeggiano:\n\nSulle mura: i balestrieri salgono sulle mura\nRipara: ricostruisce ciò che è crollato\nMangano: tira una pietra dove clicchi\nOlio: brucia chi è vicino alle mura", "enter": _enter_defense, "mark": _mark_defense, "manual": true},
-		{"title": "Ora tocca a te!", "text": "Da adesso le altre casate si muovono. Per 2 minuti c'è la tregua: nessuna ti attacca, approfittane per creare soldati.\n\nRicorda: crea soldati, premi T, clic destro sul nemico.\nOgni casata ha i suoi cubetti e un potere tutto suo, il tasto X: il tuo è «%s».\nPremi F1 quando vuoi rivedere i comandi.\n\nBuona conquista!" % String(Defs.HOUSE_POWERS[house].name), "manual": true, "last": true},
+		{"title": "Ora tocca a te!", "text": "Da adesso le altre casate si muovono. Per 2 minuti c'è la tregua: nessuna ti attacca, approfittane per creare soldati.\n\nRicorda: crea soldati, premi T, clic destro sul nemico.\nOgni casata ha i suoi cubetti e un potere tutto suo, il tasto F: il tuo è «%s».\nCtrl+1 e poi 1 fanno i gruppi di soldati, Backspace passa da un castello all'altro.\nPremi F1 quando vuoi rivedere i comandi.\n\nBuona conquista!" % String(Defs.HOUSE_POWERS[house].name), "manual": true, "last": true},
 	]
+	if story:
+		steps[0] = {"title": "Benvenuto, Conte!", "text": "Il tuo castello è %s: quello con l'anello dorato e la scritta IL TUO CASTELLO.\n\nPer ora hai solo i fanti. Il vicino, a %s, ha tre guardie e il Podestà in bagno: andiamo a trovarlo. Ti guido io, un passo alla volta." % [home.name, target.name], "manual": true}
+		steps = steps.filter(func(st: Dictionary) -> bool: return not st.title in ["Un potere speciale", "Difendi i tuoi castelli", "Ora tocca a te!"])
 	_go(0)
 
 
@@ -179,8 +192,9 @@ func _finish() -> void:
 	if finished:
 		return
 	finished = true
-	sim.ai_enabled = true
-	sim.truce_until = sim.time + Sim.TRUCE_TIME
+	if not story:
+		sim.ai_enabled = true
+		sim.truce_until = sim.time + Sim.TRUCE_TIME
 	beam.queue_free()
 	queue_free()
 
@@ -211,7 +225,10 @@ func _process(dt: float) -> void:
 		if t != text_lbl.text:
 			text_lbl.text = t
 	if s.has("done") and (s.done as Callable).call():
-		_go(index + 1)
+		if index + 1 < steps.size():
+			_go(index + 1)
+		else:
+			_finish()  # storia: l'ultimo passo è la conquista, poi pensa a tutto la missione
 
 
 # ---------------------------------------------------------------- passi
@@ -245,10 +262,11 @@ func _enter_select() -> void:
 	var out: Vector3 = home.gate_out
 	var dir: Vector3 = home.dir
 	var side := Vector3(-dir.z, 0, dir.x)
-	for k in 12:
-		sim.spawn_unit(Defs.FANTE if k % 3 != 2 else Defs.BALESTRIERE, house, out + dir * (3 + k / 4 * 2.2) + side * (k % 4 - 1.5) * 2.2)
-	sim.spawn_unit(Defs.CAVALIERE, house, out + dir * 10 + side * 5)
-	sim.spawn_unit(Defs.CAVALIERE, house, out + dir * 10 - side * 5)
+	for k in 12 if not story else 6:
+		sim.spawn_unit(Defs.FANTE if k % 3 != 2 or story else Defs.BALESTRIERE, house, out + dir * (3 + k / 4 * 2.2) + side * (k % 4 - 1.5) * 2.2)
+	if not story:
+		sim.spawn_unit(Defs.CAVALIERE, house, out + dir * 10 + side * 5)
+		sim.spawn_unit(Defs.CAVALIERE, house, out + dir * 10 - side * 5)
 	game.renderer.selected.clear()
 	ctrl.selected_castle = -1
 	ctrl.focus = out + dir * 8

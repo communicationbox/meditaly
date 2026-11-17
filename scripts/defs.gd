@@ -113,7 +113,7 @@ const CASTLES := [
 	{"name": "Cosenza", "lon": 16.45, "lat": 39.3, "house": 8, "wall": STONE, "gate": 1},
 ]
 
-## Il potere scemo di ogni casata (tasto X), stesso ordine di HOUSES. Niente Fede: solo l'attesa.
+## Il potere scemo di ogni casata (tasto F), stesso ordine di HOUSES. Niente Fede: solo l'attesa.
 ## «self» parte subito, senza scegliere un punto sulla mappa.
 const HOUSE_POWERS := [
 	{"name": "Burocrazia sabauda", "short": "Burocrazia", "icon": "sp_modulo", "self": false, "desc": "Prima di proseguire, i nemici nella zona devono compilare un modulo in triplice copia", "quip": "manca il timbro, ripassate martedì"},
@@ -234,11 +234,11 @@ const CAPTURE_REWARD := 150.0
 enum { P_PARMIGIANO, P_VINO, P_TERREMOTO, P_SCUDO, P_MUCCHE, POWER_COUNT }
 
 const POWERS := [
-	{"name": "Forma di Parmigiano", "short": "Parmigiano", "cost": 60, "cd": 32.0, "key": "1", "desc": "Una forma stagionata 36 mesi rotola sui nemici e apre una breccia"},
-	{"name": "Vino della Vittoria", "short": "Vino", "cost": 25, "cd": 18.0, "key": "2", "desc": "L'armata ubriaca è veloce, furiosa e stonata"},
-	{"name": "Terremoto", "short": "Terremoto", "cost": 70, "cd": 35.0, "key": "3", "desc": "Le mura tremano e crollano. Gli architetti giurano che erano a norma"},
-	{"name": "Scudo Benedetto", "short": "Scudo", "cost": 40, "cd": 25.0, "key": "4", "desc": "Cupola d'oro che ferma i proiettili. Benedetta, con garanzia"},
-	{"name": "Mucche Kamikaze", "short": "Mucche", "cost": 35, "cd": 20.0, "key": "5", "desc": "Mucche dal cielo. Muuu. BOOM."},
+	{"name": "Forma di Parmigiano", "short": "Parmigiano", "cost": 60, "cd": 32.0, "key": "Z", "desc": "Una forma stagionata 36 mesi rotola sui nemici e apre una breccia"},
+	{"name": "Vino della Vittoria", "short": "Vino", "cost": 25, "cd": 18.0, "key": "X", "desc": "L'armata ubriaca è veloce, furiosa e stonata"},
+	{"name": "Terremoto", "short": "Terremoto", "cost": 70, "cd": 35.0, "key": "C", "desc": "Le mura tremano e crollano. Gli architetti giurano che erano a norma"},
+	{"name": "Scudo Benedetto", "short": "Scudo", "cost": 40, "cd": 25.0, "key": "V", "desc": "Cupola d'oro che ferma i proiettili. Benedetta, con garanzia"},
+	{"name": "Mucche Kamikaze", "short": "Mucche", "cost": 35, "cd": 20.0, "key": "B", "desc": "Mucche dal cielo. Muuu. BOOM."},
 ]
 
 ## Battute che annunciano i poteri: {c} è la casata che lo lancia, {t} la città colpita.
@@ -330,7 +330,7 @@ const SAY := [
 	["Manca il timbro", "Serve la marca da bollo", "Dove firmo?", "È il modulo sbagliato", "Torni martedì", "Qui ci vuole la copia rosa"],
 	["Lo spritz dopo, c'è il re da salvare", "Grazie, sono in servizio", "Il re prima di tutto. Poi il tagliere", "Non ora, stiamo difendendo", "Tenetemelo in fresco"],
 ]
-## Sfottò fra giocatori: tasti 6-0. Il server li manda a tutti.
+## Sfottò fra giocatori: pulsanti sopra la minimappa. Il server li manda a tutti.
 const TAUNTS := [
 	"Cucù!",
 	"Tutto qui?",

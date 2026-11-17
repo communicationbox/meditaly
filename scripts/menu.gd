@@ -4,6 +4,9 @@ extends Control
 ## L'Italia generata qui si riusa per la partita (Game.prebuilt_*): si risparmiano i secondi di generazione.
 
 signal tutorial(house: int, pname: String)
+signal story(mission: int, pname: String)
+## Dopo una missione si torna qui per rifare il mondo: appena è pronto parte questa missione (0 = nessuna).
+var autostart_story := 0
 signal play_solo(house: int, pname: String)
 signal host(house: int, pname: String, port: int)
 signal join(ip: String, house: int, pname: String, port: int)
@@ -46,7 +49,8 @@ const LOAD_TIPS := [
 	"Alla sagra chi è a tavola non si tocca.",
 	"Le nonne sono lente, ma col mattarello non perdonano.",
 	"I frati pregano accanto alla chiesa. Quando non dormono.",
-	"Tasti 6-0: sfottò agli amici, uno ogni 15 secondi.",
+	"Ctrl+1 mette i soldati scelti nel gruppo 1, il tasto 1 li riprende. Due volte e la vista corre da loro.",
+	"Backspace passa da un tuo castello all'altro.",
 	"Ogni potere ha la sua bottega: se te la abbattono, lo perdi.",
 	"Davanti al Parmigiano si scappa. Nella direzione sbagliata.",
 	"Chi se ne sta tranquillo attira gli invidiosi.",
@@ -253,18 +257,19 @@ func _build_panel() -> void:
 	logo_img.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	logo_img.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_logo.add_child(logo_img)
-	# Impostazioni ed Esci nell'angolo accanto al logo: in basso resta posto per le voci che spiegano
-	var corner := VBoxContainer.new()
-	corner.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	corner.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	corner.add_theme_constant_override("separation", 6)
+	# Impostazioni ed Esci ai due lati del logo, alla stessa altezza: la testata resta in equilibrio
+	# e in basso resta posto per le voci che spiegano
 	var st := _small("Impostazioni", "Audio, schermo e difficoltà")
 	st.pressed.connect(_open_settings)
-	corner.add_child(st)
+	st.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT)
+	st.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_logo.add_child(st)
 	var ex := _small("Esci", "Chiude il gioco")
 	ex.pressed.connect(func(): get_tree().quit())
-	corner.add_child(ex)
-	_logo.add_child(corner)
+	ex.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
+	ex.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	ex.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_logo.add_child(ex)
 	v.add_child(_logo)
 	v.add_child(_gap(14))
 	v.add_child(UiStyle.label("Scegli la tua casata", 18, UiStyle.GOLD, true))
@@ -340,7 +345,13 @@ func _build_panel() -> void:
 	solo.pressed.connect(func(): _go(func(): play_solo.emit(house, name_edit.text)))
 	v.add_child(solo)
 	v.add_child(_gap(10))
-	# sotto il pulsante principale, tutte le altre voci con lo stesso peso
+	# la storia ha lo stesso peso della partita libera
+	var tut := _primary("Storia", "L'ascesa del Conte di Borgo Spigolo: 12 missioni brevi raccontate dalla Gazzetta. Ogni missione aggiunge un pezzo di gioco: la prima insegna a giocare")
+	tut.name = "Storia"
+	tut.pressed.connect(_open_story)
+	v.add_child(tut)
+	v.add_child(_gap(10))
+	# sotto i due pulsanti principali, tutte le altre voci con lo stesso peso
 	var more := GridContainer.new()
 	more.columns = 2
 	more.add_theme_constant_override("h_separation", 10)
@@ -350,14 +361,12 @@ func _build_panel() -> void:
 		var cont := _secondary("Continua", "%s, %d minuti di gioco · %s" % [Defs.HOUSES[int(sv.house)].name, int(sv.minutes), sv.date], "%s, %d minuti" % [Defs.HOUSES[int(sv.house)].name, int(sv.minutes)])
 		cont.pressed.connect(func(): _go(func(): continue_game.emit(), false))
 		more.add_child(cont)
-	var tut := _secondary("Tutorial guidato", "Prima volta? Una partita vera con la casata scelta: ti guida un passo alla volta e le altre casate aspettano. Puoi saltarlo quando vuoi", "Partita di prova, passo passo")
-	tut.pressed.connect(func(): _go(func(): tutorial.emit(house, name_edit.text)))
-	more.add_child(tut)
 	var fr := _secondary("Gioca con gli amici", "Ospita una partita o entra in quella di un amico", "Ospita o entra in rete")
 	fr.pressed.connect(func():
 		friends_box.visible = not friends_box.visible
 		_logo.visible = not friends_box.visible)  # il cartello resta tutto dentro lo schermo
 	more.add_child(fr)
+	more.columns = more.get_child_count()  # una riga sola: senza salvataggio «amici» prende tutta la larghezza
 	for k: Node in more.get_children():
 		(k as Control).size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_child(more)
@@ -520,6 +529,10 @@ func _reveal() -> void:
 	tw.tween_property(_loading, "modulate:a", 0.0, 0.9).set_trans(Tween.TRANS_SINE)
 	tw.tween_callback(func(): _loading.visible = false)
 	shown.emit()
+	if autostart_story > 0:
+		var k := autostart_story
+		autostart_story = 0
+		_go(func(): story.emit(k, name_edit.text), false)
 
 
 ## Prima di cominciare: il mondo del menu deve essere pronto per passare alla partita.
@@ -655,6 +668,73 @@ func _show_stats() -> void:
 	power_box.visible = not Settings.equal_houses
 	for k in stat_bars.size():
 		(stat_bars[k] as StatBar).set_value(3 if Settings.equal_houses else int(Defs.HOUSES[house].stats[k]))
+
+
+## Le missioni della storia: le vinte col segno, la prossima in evidenza, le altre chiuse.
+var story_panel: Control
+
+
+func _open_story() -> void:
+	if is_instance_valid(story_panel):
+		return
+	var root := Control.new()
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
+	story_panel = root
+	var dim := ColorRect.new()
+	dim.color = Color(0.03, 0.02, 0.015, 0.72)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(e: InputEvent):
+		if e is InputEventMouseButton and (e as InputEventMouseButton).pressed:
+			root.queue_free())
+	root.add_child(dim)
+	var card := UiStyle.panel(26)
+	card.custom_minimum_size = Vector2(760, 0)
+	card.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	card.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	card.grow_vertical = Control.GROW_DIRECTION_BOTH
+	root.add_child(card)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	card.add_child(v)
+	var head := HBoxContainer.new()
+	var title := UiStyle.label("L'ascesa del Conte di Borgo Spigolo", 30, UiStyle.GOLD, true)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+	var x := _small("Chiudi", "Torna al menu (Esc)")
+	x.custom_minimum_size = Vector2(90, 32)
+	x.pressed.connect(root.queue_free)
+	head.add_child(x)
+	v.add_child(head)
+	v.add_child(UiStyle.label("Il Conte vuole diventare re d'Italia: la suocera dice che non combinerà mai niente.\nOgni missione aggiunge un pezzo di gioco.", 15, UiStyle.MUTED))
+	v.add_child(_gap(4))
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 8)
+	v.add_child(grid)
+	var done := Settings.story_done
+	for k in Campaign.MISSIONS.size():
+		var mm: Dictionary = Campaign.MISSIONS[k]
+		var num := k + 1
+		var state := "vinta" if num <= done else ("da giocare" if num == done + 1 else "chiusa")
+		var b := _secondary("%d · %s" % [num, mm.title], String(mm.intro.title), "%s minuti · %s" % [mm.minutes, state])
+		b.name = "Missione %d" % num
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.disabled = num > done + 1
+		if num == done + 1:
+			UiStyle.style_button(b, Color(0.62, 0.40, 0.12), UiStyle.GOLD, Color(0.74, 0.50, 0.16))
+		b.pressed.connect(func():
+			root.queue_free()
+			_go(func(): story.emit(num, name_edit.text), false))
+		grid.add_child(b)
+	add_child(root)
+
+
+func _unhandled_key_input(e: InputEvent) -> void:
+	if is_instance_valid(story_panel) and e.is_pressed() and (e as InputEventKey).keycode == KEY_ESCAPE:
+		story_panel.queue_free()
+		get_viewport().set_input_as_handled()
 
 
 func _open_settings() -> void:

@@ -187,6 +187,109 @@ var taunt_cd: Array = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 const TAUNT_CD := 15.0
 ## Falso nei test di bilanciamento: gli eventi cambierebbero i risultati.
 var events_enabled := true
+## Storia: cosa può usare chi gioca (vedi Campaign.unlocked_at). Vuoto = tutto, come nella partita libera.
+## Vale solo per le casate umane: l'IA della missione usa quello che il setup le dà.
+var locks: Dictionary = {}
+
+
+## Gli sblocchi della missione n: la missione 12 (o più) sblocca tutto.
+func set_story_locks(n: int) -> void:
+	var u := Campaign.unlocked_at(n)
+	locks = {} if bool(u.all) else u
+	events_enabled = locks.is_empty() or bool(locks.events)
+
+
+## Storia: prepara la partita della missione. Il mondo è appena nato: si tolgono soldati e padroni
+## della partita libera e si mette quello che dice Campaign (vedi lì il formato di setup).
+func story_setup(hero: int, setup: Dictionary) -> void:
+	ulist.clear()
+	by_id.clear()
+	truce_until = 0.0
+	ai_aggression = float(setup.get("aggr", 1.0))
+	ai_cap_mult = float(setup.get("cap", 1.0))
+	var owners: Dictionary = setup.get("owners", {})
+	var guards: Dictionary = setup.get("guards", {})
+	for c: Dictionary in castles:
+		c.owner = int(owners.get(c.id, Defs.NEUTRAL))
+		c.queue = []
+	castles[Campaign.HOME_CASTLE].owner = hero
+	castles[Campaign.HOME_CASTLE].name = Campaign.HOME_NAME
+	var ai_on: Array = setup.get("ai", [])
+	for t in houses.size():
+		houses[t].pname = ""
+		houses[t].alive = t != Defs.NEUTRAL
+		if t != hero:
+			houses[t].ai = t in ai_on
+	var pn: Dictionary = setup.get("pnames", {})
+	for t: int in pn:
+		houses[t].pname = String(pn[t])
+	houses[hero].pname = "Conte di Borgo Spigolo"
+	houses[hero].gold = float(setup.get("gold", 200))
+	houses[hero].faith = float(setup.get("faith", 0))
+	for c: Dictionary in castles:
+		var g: Array = guards.get(c.id, [])
+		if g.is_empty():
+			g = [0, 0, 0] if c.owner == hero else ([5, 2, 0] if c.owner == Defs.NEUTRAL else [4, 2, 0])
+		var types: Array[int] = []
+		for k in int(g[0]): types.append(Defs.FANTE)
+		for k in int(g[1]): types.append(Defs.BALESTRIERE)
+		for k in int(g[2]): types.append(Defs.CAVALIERE)
+		for t in types:
+			var off := Vector3(rng.randf_range(-4, 4), 0, rng.randf_range(-4, 4)) * CS
+			var u := spawn_unit(t, c.owner, (c.rally as Vector3) + off)
+			u.home = u.pos
+	var home: Dictionary = castles[Campaign.HOME_CASTLE]
+	var army: Dictionary = setup.get("army", {})
+	var k := 0
+	var dir: Vector3 = home.dir
+	var side := Vector3(-dir.z, 0, dir.x)
+	for t: int in army:
+		for i in int(army[t]):
+			var u := spawn_unit(t, hero, (home.gate_out as Vector3) + dir * (3.0 + k / 5 * 2.2) + side * (k % 5 - 2.0) * 2.2)
+			u.home = u.pos
+			k += 1
+
+
+## Storia: manda un'ondata di soldati della casata team contro un castello, partendo da lontano.
+func story_attack(team: int, units: Dictionary, target_cid: int) -> Array[U]:
+	var c: Dictionary = castles[target_cid]
+	var from: Vector3 = (c.center as Vector3) + (c.dir as Vector3) * 70.0
+	var out: Array[U] = []
+	var ids := PackedInt32Array()
+	var k := 0
+	for t: int in units:
+		for i in int(units[t]):
+			var p := from + Vector3(k % 5 * 2.2 - 4.4, float(world.top_y(int(from.x), int(from.z))), k / 5 * 2.2)
+			var u := spawn_unit(t, team, p)
+			out.append(u)
+			ids.append(u.id)
+			k += 1
+	cmd_order(team, ids, c.center, false)
+	return out
+
+
+## Può la casata usare questa cosa? kind: unit, defense, build, power, groups, faith, special, events, taunts.
+func allowed(team: int, kind: String, id: Variant = null) -> bool:
+	if locks.is_empty() or team < 0 or team >= houses.size() or houses[team].ai:
+		return true
+	match kind:
+		"unit": return int(id) in locks.units
+		"defense": return String(id) in locks.defense
+		"build": return int(id) in locks.build
+		"power": return int(id) in locks.powers
+	return bool(locks.get(kind, false))
+
+
+## Un comando arrivato da chi gioca: è fra le cose già sbloccate?
+func cmd_allowed(team: int, kind: String, a: Array) -> bool:
+	match kind:
+		"recruit": return allowed(team, "unit", a[1])
+		"garrison", "repair", "mangano", "oil": return allowed(team, "defense", kind)
+		"power", "power_aim": return allowed(team, "power", a[0])
+		"build": return allowed(team, "build", a[0])
+		"special": return allowed(team, "special")
+		"taunt": return allowed(team, "taunts")
+	return true
 ## Statistiche per il simulatore di bilanciamento (spente in partita).
 var stats: Dictionary = {}
 

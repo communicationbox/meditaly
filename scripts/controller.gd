@@ -212,7 +212,7 @@ func _cine_tick(dt: float) -> void:
 
 
 ## Il puntatore fuori dalla finestra non deve far scorrere: resterebbe fermo sull'ultimo bordo toccato.
-var _mouse_in := true
+var _mouse_in := DisplayServer.get_name() != "headless"  # senza finestra non c'è mouse: niente scorrimento ai bordi
 
 
 func _notification(what: int) -> void:
@@ -466,7 +466,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_aim_release()
 			elif dragging:
 				dragging = false
-				_finish_selection(e.position, e.shift_pressed)
+				_finish_selection(e.position, e.shift_pressed, e.ctrl_pressed or e.meta_pressed)
 		elif e.button_index == MOUSE_BUTTON_RIGHT and e.pressed:
 			if not pending.is_empty():
 				pending = {}
@@ -484,19 +484,33 @@ func _unhandled_input(event: InputEvent) -> void:
 		if ke.unicode == 45 or ke.keycode == KEY_MINUS or ke.keycode == KEY_KP_SUBTRACT:
 			game.hud.toggle_debug()
 			return
+		var digit := _digit(ke.physical_keycode)
+		if digit >= 0 and game.allowed("groups"):
+			_on_group(digit, ke.ctrl_pressed or ke.meta_pressed, ke.shift_pressed)
+			return
+		if ke.physical_keycode == KEY_BACKSPACE and game.allowed("groups"):
+			cycle_castle(-1 if ke.shift_pressed else 1)
+			return
 		_on_key(ke.physical_keycode)
 
 
+## I tasti dei poteri, nell'ordine di Defs.POWERS: sotto la mano sinistra, accanto a WASD.
+const POWER_KEYS: Array[Key] = [KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B]
+const POWER_KEY_NAMES := ["Z", "X", "C", "V", "B"]
+const SPECIAL_KEY := KEY_F
+const SPECIAL_KEY_NAME := "F"
+
+
 func _on_key(k: Key) -> void:
+	var pk := POWER_KEYS.find(k)
+	if pk >= 0 and game.allowed("power", pk):
+		start_action("power", pk)
+		return
 	match k:
-		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5:
-			start_action("power", int(k) - int(KEY_1))
-		KEY_6, KEY_7, KEY_8, KEY_9:
-			game.send_cmd("taunt", [int(k) - int(KEY_6)])
-		KEY_0:
-			game.send_cmd("taunt", [4])
-		KEY_X:
-			start_special()
+		SPECIAL_KEY:
+			if game.allowed("special"): start_special()
+		KEY_F2:
+			select_army()
 		KEY_ESCAPE:
 			# prima annulla mira e selezione; se non c'è niente da annullare apre la pausa
 			if game.hud.build_menu.visible:
@@ -512,17 +526,106 @@ func _on_key(k: Key) -> void:
 		KEY_T:
 			select_army()
 		KEY_G:
-			if selected_castle >= 0: game.send_cmd("garrison", [selected_castle])
+			if selected_castle >= 0 and game.allowed("defense", "garrison"): game.send_cmd("garrison", [selected_castle])
 		KEY_R:
-			if selected_castle >= 0: game.send_cmd("repair", [selected_castle])
+			if selected_castle >= 0 and game.allowed("defense", "repair"): game.send_cmd("repair", [selected_castle])
 		KEY_M:
-			if selected_castle >= 0: start_action("mangano", selected_castle)
+			if selected_castle >= 0 and game.allowed("defense", "mangano"): start_action("mangano", selected_castle)
 		KEY_O:
-			if selected_castle >= 0: start_action("oil", selected_castle)
+			if selected_castle >= 0 and game.allowed("defense", "oil"): start_action("oil", selected_castle)
 		KEY_F1:
 			game.hud.toggle_help()
 		KEY_H:
 			game.hud.toggle_ui()
+
+
+# ---------------------------------------------------------------- gruppi e castelli, come in StarCraft
+## Gruppi 1-0: Ctrl (o Cmd) + numero li assegna, Maiusc + numero aggiunge, il numero li riprende,
+## due volte di fila porta la vista lì. Un gruppo può essere anche un castello.
+var groups: Array = []
+var _last_group := -1
+var _last_group_ms := 0
+const DOUBLE_TAP_MS := 350
+
+
+static func _digit(k: Key) -> int:
+	if k >= KEY_0 and k <= KEY_9:
+		return (int(k) - int(KEY_0) + 9) % 10  # 1 → 0, …, 0 → 9
+	return -1
+
+
+func _on_group(n: int, assign: bool, add: bool) -> void:
+	if groups.is_empty():
+		groups.resize(10)
+		for i in 10:
+			groups[i] = {"units": [], "castle": -1}
+	var g: Dictionary = groups[n]
+	var sel: Dictionary = game.renderer.selected
+	var label := str((n + 1) % 10)
+	if assign or add:
+		if not sel.is_empty():
+			var ids: Array = g.units.duplicate() if add and g.castle < 0 else []
+			for id: int in sel:
+				if not id in ids:
+					ids.append(id)
+			groups[n] = {"units": ids, "castle": -1}
+			_group_note("Gruppo %s: %d soldati" % [label, ids.size()])
+		elif selected_castle >= 0 and game.castle_owner(selected_castle) == game.my_house:
+			groups[n] = {"units": [], "castle": selected_castle}
+			_group_note("Gruppo %s: %s" % [label, game.castles[selected_castle].name])
+		return
+	var now := Time.get_ticks_msec()
+	var again := n == _last_group and now - _last_group_ms < DOUBLE_TAP_MS
+	_last_group = n
+	_last_group_ms = now
+	if int(g.castle) >= 0:
+		if game.castle_owner(int(g.castle)) != game.my_house:
+			groups[n] = {"units": [], "castle": -1}
+			return
+		game.renderer.selected.clear()
+		selected_castle = int(g.castle)
+		if again:
+			focus = (game.castles[selected_castle].center as Vector3)
+		return
+	var alive: Array = []
+	for id: int in g.units:
+		var vu: Game.VU = game.vunits.get(id)
+		if vu != null and vu.team == game.my_house:
+			alive.append(id)
+	g.units = alive
+	if alive.is_empty():
+		return
+	sel.clear()
+	for id: int in alive:
+		sel[id] = true
+	selected_castle = -1
+	if again:
+		var c := Vector3.ZERO
+		for id: int in alive:
+			c += (game.vunits[id] as Game.VU).cur
+		focus = c / alive.size()
+
+
+func _group_note(t: String) -> void:
+	if game.hud:
+		game.hud.notify(t, UiStyle.INK, 1.5)
+
+
+## Backspace: il prossimo castello mio (Maiusc: il precedente), selezionato e inquadrato.
+func cycle_castle(step: int) -> void:
+	var mine: Array[int] = []
+	for c: Dictionary in game.castles:
+		if game.castle_owner(c.id) == game.my_house:
+			mine.append(int(c.id))
+	if mine.is_empty():
+		return
+	var at := mine.find(selected_castle)
+	var next: int = mine[posmod(at + step, mine.size())] if at >= 0 else (mine[0] if step > 0 else mine[-1])
+	game.renderer.selected.clear()
+	selected_castle = next
+	focus = (game.castles[next].center as Vector3)
+	if game.hud:
+		game.hud.flash_home(next)
 
 
 func select_army() -> void:
@@ -585,7 +688,11 @@ func _give_order() -> void:
 		game.fx._spawn_debris(p + Vector3(cos(a) * 2.4, 0.6, sin(a) * 2.4), Vector3(-cos(a) * 3.0, 1.0, -sin(a) * 3.0), Color(1.0, 0.3, 0.2) if on_struct else Color(0.5, 1.0, 0.5), 0.5, 0.0, 0.3)
 
 
-func _finish_selection(at: Vector2, additive: bool) -> void:
+var _last_click_ms := 0
+var _last_click_at := Vector2.ZERO
+
+
+func _finish_selection(at: Vector2, additive: bool, same_type := false) -> void:
 	var sel: Dictionary = game.renderer.selected
 	var moved := at.distance_to(drag_start) > 8.0
 	if not additive:
@@ -611,6 +718,18 @@ func _finish_selection(at: Vector2, additive: bool) -> void:
 			bd = d
 			best = u
 	if best != null:
+		# doppio clic (o Ctrl+clic): tutti i soldati di quel tipo che si vedono sullo schermo
+		var now := Time.get_ticks_msec()
+		if now - _last_click_ms < DOUBLE_TAP_MS and at.distance_to(_last_click_at) < 12.0:
+			same_type = true
+		_last_click_ms = now
+		_last_click_at = at
+		if same_type:
+			var screen := get_viewport().get_visible_rect()
+			for u: Game.VU in game.vunits.values():
+				if u.team == game.my_house and u.type == best.type and not cam.is_position_behind(u.cur) \
+						and screen.has_point(cam.unproject_position(u.cur + Vector3(0, 1, 0))):
+					sel[u.id] = true
 		sel[best.id] = true
 		selected_castle = -1
 		return

@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320" viewBox="0 0 480 320">
+<!-- cornice, come le altre miniature -->
+<rect fill="#2b1608" x="3" y="3" width="474" height="314" rx="10"/>
+<rect fill="#e7b94e" stroke="#2b1608" stroke-width="2" x="8" y="8" width="464" height="304" rx="6"/>
+<rect fill="#2f5aa8" stroke="#2b1608" stroke-width="2" x="16" y="16" width="448" height="288" rx="3"/>
+<rect fill="#e7b94e" stroke="#2b1608" stroke-width="2" x="23" y="23" width="434" height="274"/>
+<g stroke="#2b1608" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">
+<!-- cielo e colline -->
+<rect fill="#f3dfa6" x="29" y="29" width="422" height="262"/>
+<circle fill="#ffd25e" cx="400" cy="70" r="22"/>
+<path fill="#9cbf5a" d="M29 200 Q120 150 220 190 T451 175 V291 H29 Z"/>
+<path fill="#7fa648" d="M29 240 Q160 205 300 235 T451 225 V291 H29 Z"/>
+<!-- Borgo Spigolo: castello piccolo e storto -->
+<rect fill="#c9b9a0" x="250" y="120" width="70" height="60"/>
+<rect fill="#c9b9a0" x="240" y="100" width="22" height="80"/>
+<rect fill="#c9b9a0" x="310" y="108" width="22" height="72" transform="rotate(4 321 144)"/>
+<path fill="none" d="M240 100 v-8 h6 v8 M250 100 v-8 h6 v8 M310 108 v-8 h6 v8 M320 108 v-8 h6 v8"/>
+<path fill="#5b3a1e" d="M276 180 v-24 q9 -10 18 0 v24 Z"/>
+<line x1="251" y1="100" x2="251" y2="70"/>
+<path fill="#2f5aa8" d="M251 70 l26 6 l-26 7 Z"/>
+<!-- la vacca, capo di stato maggiore -->
+<ellipse fill="#ffffff" cx="140" cy="232" rx="48" ry="26"/>
+<ellipse fill="#3a2a1a" cx="128" cy="225" rx="13" ry="9"/>
+<ellipse fill="#3a2a1a" cx="160" cy="240" rx="9" ry="6"/>
+<rect fill="#ffffff" x="104" y="250" width="9" height="24"/>
+<rect fill="#ffffff" x="160" y="250" width="9" height="24"/>
+<ellipse fill="#ffffff" cx="88" cy="214" rx="18" ry="15"/>
+<ellipse fill="#f2a7a0" cx="80" cy="222" rx="10" ry="7"/>
+<circle fill="#2b1608" cx="88" cy="208" r="2"/>
+<path fill="#e7b94e" d="M80 200 l-6 -10 M96 200 l6 -10"/>
+<!-- elmo da generale sulla vacca -->
+<path fill="#9aa3ad" d="M76 200 q12 -18 26 0 Z"/>
+<path fill="#ba3e35" d="M89 184 q4 -10 10 -6"/>
+<!-- il Conte: tunica blu, corona storta, spada alzata -->
+<rect fill="#2f5aa8" x="205" y="190" width="34" height="50" rx="4"/>
+<rect fill="#5b3a1e" x="205" y="212" width="34" height="6"/>
+<rect fill="#3a2a1a" x="209" y="240" width="10" height="34"/>
+<rect fill="#3a2a1a" x="225" y="240" width="10" height="34"/>
+<circle fill="#f0c49a" cx="222" cy="176" r="15"/>
+<path fill="#ffd25e" d="M207 166 l4 -14 l6 8 l5 -10 l5 10 l6 -8 l3 14 Z" transform="rotate(-12 222 160)"/>
+<circle fill="#2b1608" cx="217" cy="176" r="1.8"/>
+<circle fill="#2b1608" cx="227" cy="176" r="1.8"/>
+<path fill="none" d="M216 184 q6 5 12 0"/>
+<rect fill="#2f5aa8" x="239" y="190" width="9" height="26" rx="3" transform="rotate(-40 243 194)"/>
+<line x1="256" y1="176" x2="276" y2="138" stroke-width="4" stroke="#9aa3ad"/>
+<line x1="250" y1="182" x2="262" y2="172" stroke-width="4"/>
+<!-- la suocera, a braccia conserte -->
+<path fill="#6b3f7a" d="M372 278 l8 -78 h30 l8 78 Z"/>
+<circle fill="#f0c49a" cx="395" cy="186" r="14"/>
+<path fill="#d9d2c4" d="M381 182 q14 -24 28 0 q-2 -14 -14 -14 q-12 0 -14 14 Z"/>
+<circle fill="#2b1608" cx="390" cy="186" r="1.6"/>
+<circle fill="#2b1608" cx="400" cy="186" r="1.6"/>
+<path fill="none" d="M389 194 h12"/>
+<path fill="#6b3f7a" d="M378 212 h34 v10 h-34 Z"/>
+<!-- fumetto della suocera -->
+<path fill="#ffffff" d="M330 120 h96 q8 0 8 8 v26 q0 8 -8 8 h-40 l-6 12 l-4 -12 h-46 q-8 0 -8 -8 v-26 q0 -8 8 -8 Z"/>
+</g>
+<!-- nel fumetto solo tre puntini: le scritte nelle immagini non si leggono in tutte le lingue né con tutti i motori -->
+<circle fill="#2b1608" cx="362" cy="141" r="4"/><circle fill="#2b1608" cx="380" cy="141" r="4"/><circle fill="#2b1608" cx="398" cy="141" r="4"/>
+</svg>

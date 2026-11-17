@@ -23,6 +23,8 @@ func frames(n: int) -> void:
 
 
 func shot(n: String) -> void:
+	if DisplayServer.get_name() == "headless":  # senza finestra non si disegna: niente foto
+		return
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("%s/%s.png" % [out, n])
 

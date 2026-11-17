@@ -3,7 +3,8 @@ extends Node
 ##   -- --server [--port N]        server dedicato (anche --headless)
 ##   -- --connect IP [--house N]   entra direttamente in una partita
 ##   -- --solo [--house N]         partita in solitaria immediata
-##   -- --tutorial [--house N]     partita guidata
+##   -- --tutorial [--house N]     partita guidata (il vecchio tutorial)
+##   -- --missione N               la missione N della storia
 ##   -- --demo                     dimostrazione: assedio visto dall'alto + screenshot
 ##   -- --scena-re                 solo la scena del re sul gabinetto, a ripetizione
 ##   -- --finale                   solo il finale di chi vince, a ripetizione
@@ -33,6 +34,8 @@ func _ready() -> void:
 		_start_game().start_dedicated(_opt(a, "--port", str(Defs.PORT)).to_int(), a)
 	elif "--connect" in a:
 		_start_game().start_client(_opt(a, "--connect", "127.0.0.1"), _opt(a, "--port", str(Defs.PORT)).to_int(), pref, pname, a)
+	elif "--missione" in a:
+		_start_game().start_solo(Campaign.HERO_HOUSE, pname, a)
 	elif "--solo" in a or "--demo" in a or "--tutorial" in a or "--scena-re" in a or "--finale" in a:
 		_start_game().start_solo(pref, pname, a)
 	else:
@@ -58,12 +61,26 @@ func _show_menu() -> void:
 	menu = (load("res://scripts/menu.gd") as GDScript).new()
 	add_child(menu)
 	menu.tutorial.connect(func(house: int, pname: String): _start_game().start_solo(house, pname, PackedStringArray(["--tutorial"])))
+	menu.story.connect(func(k: int, pname: String): _start_game().start_solo(Campaign.HERO_HOUSE, pname, PackedStringArray(["--missione", str(k)])))
+	if _story_next > 0:
+		menu.autostart_story = _story_next
+		_story_next = 0
 	menu.play_solo.connect(func(house: int, pname: String): _start_game().start_solo(house, pname, PackedStringArray()))
 	menu.host.connect(func(house: int, pname: String, port: int): _start_game().start_host(port, house, pname))
 	menu.join.connect(func(ip: String, house: int, pname: String, port: int): _start_game().start_client(ip, port, house, pname, PackedStringArray()))
 	menu.continue_game.connect(func():
 		if not _start_game().start_loaded():
 			back_to_menu())
+
+
+## Dalla fine di una missione alla prossima (o alla stessa, per riprovare): il mondo va rifatto,
+## quindi si passa dal menu, che appena è pronto fa partire la missione da solo.
+var _story_next := 0
+
+
+func story_from_menu(k: int) -> void:
+	_story_next = k
+	back_to_menu()
 
 
 func back_to_menu() -> void:
