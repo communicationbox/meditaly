@@ -731,7 +731,7 @@ func clear_flag() -> void:
 	if selected_castle < 0 or game.castle_owner(selected_castle) != game.my_house:
 		return
 	if game.castle_flag(selected_castle) != null:
-		game.fx.sfx.play_flat("boing", -12.0)
+		game.fx.sfx.play_flat("hit", -16.0)
 	game.send_cmd("rally_clear", [selected_castle])
 
 

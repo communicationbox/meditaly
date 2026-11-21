@@ -213,7 +213,7 @@ func event(kind: String, p: Vector3, a: float) -> void:
 		"taunt":
 			var cam := get_viewport().get_camera_3d()
 			if cam:
-				sfx.play("boing", cam.global_position - cam.global_basis.z * 6.0, 0.0, 0.15)
+				sfx.play("voice", cam.global_position - cam.global_basis.z * 6.0, -6.0, 0.15)
 		"porchetta":
 			_porchetta(p, a)
 		"bell":
@@ -287,7 +287,7 @@ func event(kind: String, p: Vector3, a: float) -> void:
 			for k in 60:
 				var o := Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)) * a
 				_spawn_debris(p + o, Vector3(0, randf_range(3, 9), 0), Color(0.72, 0.1, 0.32), randf_range(0.8, 2.2), -2.0, randf_range(0.3, 0.7))
-			sfx.play("boing", p, 2.0, 0.3)
+			sfx.play("whoosh", p, -6.0, 0.3)
 		"quake":
 			quakes.append({"pos": p, "t": a})
 			sfx.play("quake", p, 8.0, 0.05)
@@ -382,14 +382,14 @@ func update_wheels(data: PackedFloat32Array) -> void:
 			mi.global_position = p
 			n = {"node": mi, "from": p, "to": p, "yaw": data[i + 4], "roll": data[i + 5], "t": 0.0, "last_y": p.y}
 			wheel_nodes[id] = n
-			sfx.play("boing", p, 6.0, 0.2)
+			sfx.play("hit", p, -4.0, 0.2)  # la forma parte: un tonfo sordo
 		n.from = (n.node as Node3D).global_position
 		n.to = p
 		n.yaw = data[i + 4]
 		n.roll = data[i + 5]
 		n.t = 0.0
 		if p.y - float(n.last_y) > 0.8:
-			sfx.play("boing", p, 3.0, 0.3)
+			sfx.play("hit", p, -8.0, 0.3)  # rimbalzo della forma
 		n.last_y = p.y
 		i += 6
 	for id: int in wheel_nodes.keys():
@@ -612,7 +612,7 @@ func _king_exits(p: Vector3, house: int, variant: int, cid: int) -> void:
 	var tw := create_tween()
 	match variant:
 		1:  # la botte rotola fuori, si sfascia e lui riparte barcollando
-			sfx.play("boing", gate, 4.0, 0.0)
+			sfx.play("crash", gate, -8.0, 0.1)
 			var end_roll := gate + dir * 49.0
 			tw.tween_method(func(t: float) -> void:
 				var q := gate + dir * (t * 46.0 + 3.0)
@@ -639,7 +639,7 @@ func _king_exits(p: Vector3, house: int, variant: int, cid: int) -> void:
 			throne.rotation = Vector3(0.0, face, 0.0)
 			throne.scale = Vector3.ONE * 2.2
 			tw.finished.connect(throne.queue_free)
-			sfx.play("boing", p, 8.0, 0.0)
+			sfx.play("crash", p, -6.0, 0.1)
 			sfx.play("horn", p, 0.0, 0.3)
 			if game.ctrl and game.ctrl.cine_castle() == cid:
 				# chi guarda la scena lo segue fin lassù
@@ -832,7 +832,7 @@ func _king_exits(p: Vector3, house: int, variant: int, cid: int) -> void:
 
 ## Il nome del potere che sale dal punto colpito.
 func _special_fx(p: Vector3, house: int) -> void:
-	sfx.play("boing", p, 5.0, 0.1)
+	sfx.play("horn", p, -10.0, 0.1)
 	smoke(p + Vector3(0, 2, 0), 2.0, 10)
 	var l := Label3D.new()
 	l.text = String(Defs.HOUSE_POWERS[clampi(house, 0, Defs.HOUSE_POWERS.size() - 1)].name) + "!"
@@ -874,7 +874,6 @@ func _shout(n: Node3D, text: String, col: Color) -> Label3D:
 
 ## Il re ucciso schizza fuori dal tetto del mastio, gabinetto compreso, girando su se stesso.
 func _king_flies(p: Vector3, house: int) -> void:
-	sfx.play("boing", p, 6.0, 0.0)
 	sfx.play("horn", p, 0.0, 0.3)
 	var mi := MeshInstance3D.new()
 	mi.mesh = UnitModels.new().re(Defs.HOUSES[clampi(house, 0, Defs.HOUSES.size() - 1)].color, false)
