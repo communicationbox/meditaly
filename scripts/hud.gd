@@ -343,6 +343,8 @@ func _castle_panel() -> void:
 	var q := HBoxContainer.new()
 	q.add_theme_constant_override("separation", 6)
 	var q_lbl := UiStyle.label("In arrivo", 16, UiStyle.MUTED)
+	q_lbl.name = "q_lbl"
+	q_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
 	q_lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	q.add_child(q_lbl)
 	queue_row = HBoxContainer.new()
@@ -2312,6 +2314,13 @@ func _refresh_castle(cid: int) -> void:
 	cap_lbl.text = "%d%%" % int(float(c[1]) * 100.0)
 	var q: Array = c[8]
 	var qw: Control = queue_row.get_meta("wrap")
+	# mura rovinate, reclute più lente: lo si dice accanto alla coda
+	var ql := qw.find_child("q_lbl", true, false) as Label
+	if ql != null:
+		var sp := int(round(clampf(float(c[3]), Sim.RECRUIT_MIN, 1.0) * 100.0))
+		ql.text = "In arrivo" if sp >= 99 else "In arrivo · %d%%" % sp
+		ql.add_theme_color_override("font_color", UiStyle.MUTED if sp >= 99 else UiStyle.DANGER_TEXT)
+		ql.tooltip_text = "" if sp >= 99 else "Le mura sono al %d%%: le reclute escono al %d%% della velocità. Ripara per tornare al massimo" % [int(float(c[3]) * 100.0), sp]
 	qw.visible = mine and not q.is_empty()
 	if qw.visible:
 		queue_bar.value = c[9]

@@ -61,6 +61,8 @@ Recluta dal castello con i fiorini, porta l'armata al nemico ed entra nel cortil
 
 **Assedio.** Le mura hanno un vero supporto strutturale: ciò che si stacca dal terreno cade come corpo rigido e schiaccia ciò che colpisce. La fanteria cerca la strada più breve, passa dalle brecce appena si aprono e altrimenti abbatte la porta.
 
+**Mura e reclute.** Un castello rovinato recluta più piano: la coda va alla velocità delle mura in piedi (mura al 60%, reclute al 60%), mai sotto il 25%. Il pannello lo scrive accanto a «In arrivo»; riparando si torna al massimo.
+
 **Difesa.** Torri e mastio tirano da soli (prima alle macchine d'assedio) finché reggono; il mangano del mastio tira da solo dove i nemici sono ammassati e l'olio bollente cade da solo su chi si accalca sotto le mura; balestrieri sulle mura con +35% di gittata; «Ripara tutto»: si paga subito 0,5 fiorini per blocco mancante e i muratori ricostruiscono 40 blocchi al secondo (10 sotto attacco), con l'avanzamento sul pulsante; finché non hanno finito non si riclicca; mangano sul mastio; olio bollente.
 
 **Nessuno è al sicuro.** L'IA sceglie il bersaglio più vicino, ma un castello che nessuno disturba da più di 2 minuti le sembra via via più vicino (fino a un terzo della distanza dopo 8 minuti). Così anche Palermo, sola sull'isola, prima o poi riceve visite.

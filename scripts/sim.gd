@@ -412,6 +412,14 @@ func cmd_recruit(team: int, cid: int, type: int) -> void:
 	(c.queue as Array).append({"type": type, "t": float(d.time)})
 
 
+## Un castello distrutto recluta più piano: velocità pari alle mura in piedi, mai sotto RECRUIT_MIN.
+const RECRUIT_MIN := 0.25
+
+
+static func recruit_speed(c: Dictionary) -> float:
+	return clampf(float(c.get("integrity", 1.0)), RECRUIT_MIN, 1.0)
+
+
 ## Il limite di truppe di una casata: cresce con i castelli che tiene.
 func unit_cap(team: int) -> int:
 	if houses[team].ai:
@@ -2425,7 +2433,7 @@ func _tick_castle(c: Dictionary, dt: float) -> void:
 	# coda di reclutamento
 	var q: Array = c.queue
 	if not q.is_empty():
-		q[0].t -= dt
+		q[0].t -= dt * recruit_speed(c)
 		if q[0].t <= 0.0:
 			var type: int = q[0].type
 			q.remove_at(0)

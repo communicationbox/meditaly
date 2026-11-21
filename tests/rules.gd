@@ -621,6 +621,18 @@ func _run() -> void:
 	sim._run_event(5)
 	check("scomunica: niente Fede", float(sim._faith_rates(0.5)[lead2]) == 0.0)
 	sim.houses[lead2].excom_until = 0.0
+	# castello distrutto: la coda delle reclute va più piano, in proporzione alle mura in piedi
+	var rq: Dictionary = g.castles[1]
+	rq.queue = [{"type": Defs.FANTE, "t": 2.0}]
+	rq.integrity = 0.5
+	sim._tick_castle(rq, 1.0)
+	check("mura al 50%%: coda a metà velocità (%.2f)" % float(rq.queue[0].t), is_equal_approx(float(rq.queue[0].t), 1.5))
+	rq.integrity = 0.05
+	rq.queue = [{"type": Defs.FANTE, "t": 2.0}]
+	sim._tick_castle(rq, 1.0)
+	check("mura quasi rase: mai sotto il %d%%" % int(Sim.RECRUIT_MIN * 100.0), is_equal_approx(float(rq.queue[0].t), 2.0 - Sim.RECRUIT_MIN))
+	rq.queue = []
+	sim._update_integrity(rq)
 	# chi conquista un castello si prende le botteghe che gli stanno attorno
 	var shop_c: Dictionary = g.castles[5]
 	var shop_far: Dictionary = g.castles[0]
