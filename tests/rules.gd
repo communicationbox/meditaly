@@ -641,14 +641,16 @@ func _run() -> void:
 	an.owner = Defs.NEUTRAL
 	for k in 3:
 		sim.spawn_unit(Defs.FANTE, Defs.NEUTRAL, an.rally)
-	for k in 8:
-		sim.spawn_unit(Defs.FANTE, 2, (an.gate_out as Vector3) + Vector3(k % 4 * 2.0, 0, k / 4 * 2.0))
+	var ag: Vector3 = an.gate_out
+	var adir: Vector3 = an.dir
+	var aside := Vector3(-adir.z, 0, adir.x)
+	for k in Defs.TURNCOAT_MIN - 1:
+		sim.spawn_unit(Defs.FANTE, 2, ag + adir * (2.0 + k / 11 * 1.6) + aside * (k % 11 - 5) * 1.6)
 	sim._tick_lords(0.5)
-	check("Malatesta: 8 soldati non bastano", int(an.owner) == Defs.NEUTRAL)
-	for k in 10:
-		sim.spawn_unit(Defs.FANTE, 2, (an.gate_out as Vector3) + Vector3(k % 4 * 2.0, 0, 4.0 + k / 4 * 2.0))
+	check("Malatesta: %d soldati non bastano" % (Defs.TURNCOAT_MIN - 1), int(an.owner) == Defs.NEUTRAL)
+	sim.spawn_unit(Defs.FANTE, 2, ag + adir * 2.0)
 	sim._tick_lords(0.5)
-	check("Malatesta: con 18 cambiano bandiera", int(an.owner) == 2)
+	check("Malatesta: con %d cambiano bandiera" % Defs.TURNCOAT_MIN, int(an.owner) == 2)
 	an.owner = Defs.NEUTRAL
 	for u: Sim.U in sim.ulist.duplicate():
 		u.hp = 0.0

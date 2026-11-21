@@ -285,7 +285,7 @@ const TRIBUTE_GOLD := 40.0
 const TRIBUTE_EVERY := 120.0
 const TRIBUTE_GRUDGE := 300.0
 ## I Malatesta si arrendono a un'armata grande almeno così, e almeno TURNCOAT_RATIO volte la loro.
-const TURNCOAT_MIN := 15
+const TURNCOAT_MIN := 100
 const TURNCOAT_RATIO := 3
 
 

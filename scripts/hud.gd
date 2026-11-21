@@ -2231,7 +2231,7 @@ func drappo_castle() -> int:
 ## Il carattere di ogni signoria minore, come lo racconta il pannello del castello.
 const LORD_TRAITS := {
 	"compra": "Si vende: chi paga entra senza combattere",
-	"voltagabbana": "Voltagabbana: si arrende a chi arriva con un'armata tre volte la sua",
+	"voltagabbana": "Voltagabbana: si arrende senza combattere a chi arriva con almeno 100 soldati",
 	"tributo": "Il Giudice paga 40 fiorini ogni 2 minuti a chi lascia in pace la Sardegna",
 }
 
