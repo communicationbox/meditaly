@@ -1,5 +1,5 @@
 extends SceneTree
-## Comandi alla StarCraft, senza finestra: gruppi, Backspace sui castelli, poteri su Z X C V B e F,
+## Comandi alla StarCraft, senza finestra: gruppi, Tab e Backspace sui castelli, poteri su Z X C V B e F,
 ## doppio clic sullo stesso tipo, squadre disegnate.
 ##   godot --headless --path . -s tests/controls.gd
 
@@ -25,6 +25,17 @@ func key(k: Key, ctrl := false, shift := false) -> void:
 	e.shift_pressed = shift
 	e.pressed = true
 	c._unhandled_input(e)
+	await process_frame
+
+
+## Un tasto vero, dalla finestra: passa da tutti i gestori come in partita (Tab lo vuole).
+func real_key(k: Key, shift := false) -> void:
+	var e := InputEventKey.new()
+	e.physical_keycode = k
+	e.keycode = k
+	e.shift_pressed = shift
+	e.pressed = true
+	root.push_input(e, true)
 	await process_frame
 
 
@@ -90,6 +101,10 @@ func _run() -> void:
 	check("Backspace ricomincia dal primo (%d)" % c.selected_castle, c.selected_castle == 5)
 	await key(KEY_BACKSPACE, false, true)
 	check("Maiusc+Backspace torna indietro (%d)" % c.selected_castle, c.selected_castle == 6)
+	await real_key(KEY_TAB)
+	check("Tab passa al castello dopo (%d)" % c.selected_castle, c.selected_castle == 5)
+	await real_key(KEY_TAB, true)
+	check("Maiusc+Tab torna indietro (%d)" % c.selected_castle, c.selected_castle == 6)
 	# poteri
 	sim.houses[4].faith = 150.0
 	sim.houses[4].all_shops = true

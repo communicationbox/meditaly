@@ -938,15 +938,46 @@ func _say(id: int, cat: int, line: int, p: Vector3, named := "") -> void:
 		bubble_layer = CanvasLayer.new()
 		bubble_layer.layer = 0  # sotto l'interfaccia, sopra il mondo
 		add_child(bubble_layer)
+	var l := _bubble_label(text, Defs.SAY_COLORS[cat], Color(1.0, 0.82, 0.42, 0.97) if cat == Defs.SAY_SFOTTO else Color(0.99, 0.95, 0.84, 0.97))
+	bubble_layer.add_child(l)
+	l.size = l.get_combined_minimum_size()
+	l.pivot_offset = l.size * 0.5
+	l.rotation = randf_range(-0.04, 0.04)  # storti quanto basta, come in una striscia
+	l.visible = false  # lo posiziona _update_bubbles, così non compare per un frame nell'angolo
+	sfx.play("voice", p, 0.0, 0.3)
+	bubbles.append({"node": l, "id": id, "t": 0.0, "pos": p, "off": NAN, "life": 2.6 + l.text.length() * 0.03})
+
+
+## Un fumetto qualsiasi sopra un punto del mondo (la nonna al pentolone): stesso stile e stessa
+## impaginazione di quelli dei soldati, ma senza fila d'attesa.
+func bubble_at(p: Vector3, text: String, ink: Color) -> void:
+	var cam := get_viewport().get_camera_3d()
+	if cam == null or cam.is_position_behind(p) or cam.global_position.distance_to(p) > 190.0:
+		return
+	if bubble_layer == null:
+		bubble_layer = CanvasLayer.new()
+		bubble_layer.layer = 0
+		add_child(bubble_layer)
+	while bubbles.size() >= MAX_BUBBLES:
+		(bubbles.pop_front().node as Node).queue_free()
+	var l := _bubble_label(text, ink, Color(0.99, 0.95, 0.84, 0.97))
+	bubble_layer.add_child(l)
+	l.size = l.get_combined_minimum_size()
+	l.pivot_offset = l.size * 0.5
+	l.rotation = randf_range(-0.04, 0.04)
+	l.visible = false
+	bubbles.append({"node": l, "id": -1, "t": 0.0, "pos": p, "off": NAN, "life": 2.8 + text.length() * 0.03})
+
+
+func _bubble_label(text: String, ink: Color, bg: Color) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	l.add_theme_font_override("font", UiStyle.comic_font())
 	l.add_theme_font_size_override("font_size", 20)
-	var ink: Color = Defs.SAY_COLORS[cat]
 	l.add_theme_color_override("font_color", ink)
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(1.0, 0.82, 0.42, 0.97) if cat == Defs.SAY_SFOTTO else Color(0.99, 0.95, 0.84, 0.97)
+	sb.bg_color = bg
 	sb.border_color = ink.darkened(0.25)
 	sb.set_border_width_all(3)
 	sb.set_corner_radius_all(14)
@@ -958,13 +989,7 @@ func _say(id: int, cat: int, line: int, p: Vector3, named := "") -> void:
 	sb.shadow_size = 2
 	sb.shadow_offset = Vector2(2, 3)
 	l.add_theme_stylebox_override("normal", sb)
-	bubble_layer.add_child(l)
-	l.size = l.get_combined_minimum_size()
-	l.pivot_offset = l.size * 0.5
-	l.rotation = randf_range(-0.04, 0.04)  # storti quanto basta, come in una striscia
-	l.visible = false  # lo posiziona _update_bubbles, così non compare per un frame nell'angolo
-	sfx.play("voice", p, 0.0, 0.3)
-	bubbles.append({"node": l, "id": id, "t": 0.0, "pos": p, "off": NAN, "life": 2.6 + l.text.length() * 0.03})
+	return l
 
 
 ## Impagina i fumetti sullo schermo, in pixel: i più vecchi restano sopra la testa di chi parla,
@@ -1154,13 +1179,16 @@ func _palio(p: Vector3, life: float) -> void:
 
 
 # ---------------------------------------------------------------- bandiere di raduno
-## Una per ogni tuo castello che ne ha una: palo, stendardo della casata che sventola, pomo dorato,
-## cartello «Raduno» e un cerchio che pulsa per terra. Con il castello selezionato, dalla porta alla
-## bandiera corre una fila di puntini.
+## Una per ogni tuo castello che ne ha una: il pentolone della nonna. Calderone sul treppiede con il
+## fuoco sotto, minestrone che bolle e fuma, mestolo che gira da solo, la nonna di guardia, lo stendardo
+## della casata; niente scritte, parlano solo i fumetti della nonna. Con il castello selezionato, dalla porta al
+## pentolone corre una fila di puntini.
 var flag_nodes: Dictionary = {}  # castello -> Node3D
 var _flag_dots: Array[MeshInstance3D] = []
 var _flag_t := 0.0
 const FLAG_DOTS := 28
+## Il pentolone è più grande dei soldati: deve vedersi anche da lontano.
+const FLAG_SCALE := 1.35
 
 
 func _update_flags(dt: float) -> void:
@@ -1172,6 +1200,15 @@ func _update_flags(dt: float) -> void:
 	for c: Dictionary in game.castles:
 		var f: Variant = game.castle_flag(c.id)
 		if f == null or me < 0 or game.castle_owner(c.id) != me:
+			continue
+		# due castelli sullo stesso pentolone: se ne vede uno solo
+		var dup := false
+		for other: int in keep:
+			var on: Node3D = flag_nodes.get(other)
+			if on != null and is_instance_valid(on) and Vector2(on.global_position.x - f.x, on.global_position.z - f.z).length() < 1.0:
+				dup = true
+				break
+		if dup:
 			continue
 		keep[c.id] = true
 		var node: Node3D = flag_nodes.get(c.id)
@@ -1192,9 +1229,9 @@ func _update_flags(dt: float) -> void:
 	_update_flag_dots(me)
 
 
-## La bandiera appena piantata, prima che il server risponda: rimbalzo e uno squillo.
+## Il pentolone appena piantato, prima che il server risponda: rimbalzo e la campana del pranzo.
 func flag_planted(p: Vector3) -> void:
-	sfx.play("horn", p, -16.0, 0.15)
+	sfx.play("bell", p, -10.0, 0.1)
 	for k in 12:
 		var a := k * TAU / 12.0
 		_spawn_debris(p + Vector3(cos(a) * 1.5, 0.4, sin(a) * 1.5), Vector3(cos(a) * 4.0, 3.0, sin(a) * 4.0), Color(0.55, 0.42, 0.25), 0.5, 18.0, 0.3)
@@ -1207,9 +1244,9 @@ func flag_planted(p: Vector3) -> void:
 
 
 func _bounce(node: Node3D) -> void:
-	node.scale = Vector3(1.3, 0.4, 1.3)
+	node.scale = Vector3(1.3, 0.4, 1.3) * FLAG_SCALE
 	var tw := node.create_tween()
-	tw.tween_property(node, "scale", Vector3.ONE, 0.45).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(node, "scale", Vector3.ONE * FLAG_SCALE, 0.45).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 
 
 func _make_flag(col: Color) -> Node3D:
@@ -1217,50 +1254,140 @@ func _make_flag(col: Color) -> Node3D:
 	add_child(root)
 	var wood := _mat(Color(0.47, 0.30, 0.15))
 	var dark := _mat(Color(0.30, 0.19, 0.09))
-	_pbox(root, Vector3(1.8, 0.35, 1.8), Vector3(0, 0.15, 0), _mat(Color(0.42, 0.31, 0.18)))  # la zolla
-	_pbox(root, Vector3(0.28, 6.4, 0.28), Vector3(0, 3.2, 0), wood)
+	var iron := _mat(Color(0.16, 0.15, 0.15))
+	iron.metallic = 0.5
+	iron.roughness = 0.5
+	_pbox(root, Vector3(3.2, 0.2, 3.2), Vector3(0, 0.1, 0), _mat(Color(0.42, 0.31, 0.18)))  # terra battuta
+	# il fuoco: ceppi incrociati e fiamme che tremolano
+	for a: float in [0.0, PI / 3.0, -PI / 3.0]:
+		var ceppo := _pbox(root, Vector3(1.6, 0.22, 0.22), Vector3(0, 0.3, 0), dark)
+		ceppo.rotation.y = a
+	var fire := Node3D.new()
+	fire.name = "fire"
+	fire.position = Vector3(0, 0.4, 0)
+	root.add_child(fire)
+	for k in 5:
+		var fm := _mat(Color(1.0, 0.55 + k * 0.08, 0.1))
+		fm.emission_enabled = true
+		fm.emission = Color(1.0, 0.45 + k * 0.08, 0.05)
+		fm.emission_energy_multiplier = 2.0
+		var ang := k * TAU / 5.0
+		_pbox(fire, Vector3(0.3, 0.6, 0.3), Vector3(cos(ang) * 0.35, 0.3, sin(ang) * 0.35), fm)
+	# treppiede
+	for k in 3:
+		var ang := k * TAU / 3.0
+		var leg := _pbox(root, Vector3(0.16, 3.6, 0.16), Vector3(cos(ang) * 1.05, 1.7, sin(ang) * 1.05), wood)
+		leg.rotation = Vector3(sin(ang) * -0.3, 0, cos(ang) * 0.3)
+	# il pentolone, con il minestrone che bolle
+	var pot := MeshInstance3D.new()
+	var pm := CylinderMesh.new()
+	pm.top_radius = 1.05
+	pm.bottom_radius = 0.8
+	pm.height = 1.1
+	pot.mesh = pm
+	pot.material_override = iron
+	pot.position = Vector3(0, 1.45, 0)
+	root.add_child(pot)
+	var rim := MeshInstance3D.new()
+	var rm0 := TorusMesh.new()
+	rm0.inner_radius = 0.98
+	rm0.outer_radius = 1.15
+	rim.mesh = rm0
+	rim.material_override = iron
+	rim.position = Vector3(0, 2.0, 0)
+	root.add_child(rim)
+	var soup := MeshInstance3D.new()
+	var sm := CylinderMesh.new()
+	sm.top_radius = 0.98
+	sm.bottom_radius = 0.98
+	sm.height = 0.05
+	soup.mesh = sm
+	soup.material_override = _mat(Color(0.82, 0.42, 0.16))
+	soup.position = Vector3(0, 1.92, 0)
+	root.add_child(soup)
+	var bits := Node3D.new()
+	bits.name = "bits"
+	bits.position = Vector3(0, 1.98, 0)
+	root.add_child(bits)
+	var veg := [Color(0.3, 0.65, 0.2), Color(0.95, 0.6, 0.1), Color(0.95, 0.9, 0.7), Color(0.75, 0.15, 0.1)]
+	for k in 7:
+		var ang := k * 2.4
+		_pbox(bits, Vector3(0.18, 0.12, 0.18), Vector3(cos(ang) * (0.25 + k * 0.08), 0, sin(ang) * (0.25 + k * 0.08)), _mat(veg[k % veg.size()]))
+	# il mestolo gira da solo nel pentolone
+	var ladle := Node3D.new()
+	ladle.name = "ladle"
+	ladle.position = Vector3(0, 1.9, 0)
+	root.add_child(ladle)
+	var stick := _pbox(ladle, Vector3(0.12, 1.9, 0.12), Vector3(0.45, 0.7, 0), wood)
+	stick.rotation.z = -0.35
+	# la nonna di guardia, che controlla che nessuno assaggi prima del tempo
+	var nonna := MeshInstance3D.new()
+	nonna.name = "nonna"
+	nonna.mesh = models.nonna()
+	var nm := StandardMaterial3D.new()
+	nm.vertex_color_use_as_albedo = true
+	nm.vertex_color_is_srgb = true
+	nonna.material_override = nm
+	nonna.scale = Vector3.ONE * 1.6
+	nonna.position = Vector3(2.0, 0.2, 0.3)
+	nonna.rotation.y = -PI / 2.0
+	root.add_child(nonna)
+	# l'eliminacode, come dal salumiere: si prende il numero anche in guerra (si vede, non serve scriverlo)
+	var post := Node3D.new()
+	post.position = Vector3(1.6, 0, -2.2)
+	root.add_child(post)
+	_pbox(post, Vector3(0.14, 2.4, 0.14), Vector3(0, 1.2, 0), dark)
+	_pbox(post, Vector3(0.55, 0.45, 0.4), Vector3(0, 2.5, 0), _mat(Color(0.8, 0.12, 0.1)))
+	_pbox(post, Vector3(0.12, 0.3, 0.02), Vector3(0, 2.25, 0.21), _mat(Color(0.97, 0.95, 0.88)))  # il bigliettino
+	# la mucca col bavaglino, in fila anche lei
+	var cow := MeshInstance3D.new()
+	cow.name = "cow"
+	cow.mesh = models.cow()
+	var cmat := StandardMaterial3D.new()
+	cmat.vertex_color_use_as_albedo = true
+	cmat.vertex_color_is_srgb = true
+	cow.material_override = cmat
+	cow.position = Vector3(-2.6, 0.2, 1.8)
+	cow.rotation.y = PI * 0.15
+	root.add_child(cow)
+	# bavaglino a quadretti, come la tovaglia della domenica
+	var bib := _pbox(root, Vector3(0.7, 0.55, 0.05), Vector3(0, 0, 0), _mat(Color(0.85, 0.12, 0.1)))
+	bib.name = "bib"
+	var check := _mat(Color(0.98, 0.96, 0.92))
+	for qx in 3:
+		for qy in 2:
+			if (qx + qy) % 2 == 0:
+				_pbox(bib, Vector3(0.2, 0.2, 0.02), Vector3(-0.23 + qx * 0.23, -0.12 + qy * 0.24, 0.03), check)
+	# lo stendardo della casata, piantato accanto: si capisce di chi è il pranzo
+	var pole := Node3D.new()
+	pole.position = Vector3(-1.9, 0, -1.2)
+	root.add_child(pole)
+	_pbox(pole, Vector3(0.22, 5.2, 0.22), Vector3(0, 2.6, 0), wood)
 	var gilt := _mat(Color(1.0, 0.8, 0.25))
 	gilt.metallic = 0.6
 	gilt.roughness = 0.35
-	_pbox(root, Vector3(0.55, 0.55, 0.55), Vector3(0, 6.6, 0), gilt)
-	# stendardo: quattro strisce che sventolano una dopo l'altra, con una fascia chiara al centro
+	_pbox(pole, Vector3(0.45, 0.45, 0.45), Vector3(0, 5.35, 0), gilt)
 	var cloth := Node3D.new()
 	cloth.name = "cloth"
-	cloth.position = Vector3(0.14, 5.9, 0)
-	root.add_child(cloth)
+	cloth.position = Vector3(0.11, 4.9, 0)
+	pole.add_child(cloth)
 	var main := _mat(col)
 	var light := _mat(col.lerp(Color.WHITE, 0.75))
 	var piv := cloth
-	for k in 4:
+	for k in 3:
 		var seg := Node3D.new()
-		seg.position = Vector3(0.0 if k == 0 else 0.8, 0, 0)
+		seg.position = Vector3(0.0 if k == 0 else 0.7, 0, 0)
 		piv.add_child(seg)
-		var h := 1.7 - k * 0.22
-		_pbox(seg, Vector3(0.82, h, 0.08), Vector3(0.41, -h * 0.5, 0), main)
-		_pbox(seg, Vector3(0.83, 0.3, 0.1), Vector3(0.41, -h * 0.5, 0), light)
+		var h := 1.3 - k * 0.2
+		_pbox(seg, Vector3(0.72, h, 0.07), Vector3(0.36, -h * 0.5, 0), main)
+		_pbox(seg, Vector3(0.73, 0.24, 0.09), Vector3(0.36, -h * 0.5, 0), light)
 		piv = seg
-	# cartello inchiodato al palo
-	var board := _pbox(root, Vector3(1.7, 0.75, 0.12), Vector3(0, 1.5, 0.2), wood)
-	_pbox(board, Vector3(0.12, 0.12, 0.05), Vector3(-0.7, 0.22, 0.07), dark)
-	_pbox(board, Vector3(0.12, 0.12, 0.05), Vector3(0.7, 0.22, 0.07), dark)
-	var sign := Label3D.new()
-	sign.text = "RADUNO"
-	sign.font = UiStyle.title_font()
-	sign.font_size = 40
-	sign.outline_size = 8
-	sign.modulate = Color(1.0, 0.93, 0.75)
-	sign.outline_modulate = Color(0.25, 0.12, 0.04)
-	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sign.no_depth_test = true
-	sign.pixel_size = 0.012
-	sign.position = Vector3(0, 8.0, 0)
-	root.add_child(sign)
 	# cerchio per terra che pulsa
 	var ring := MeshInstance3D.new()
 	ring.name = "ring"
 	var tm := TorusMesh.new()
-	tm.inner_radius = 2.6
-	tm.outer_radius = 3.0
+	tm.inner_radius = 3.4
+	tm.outer_radius = 3.8
 	tm.rings = 24
 	ring.mesh = tm
 	var rm := StandardMaterial3D.new()
@@ -1271,13 +1398,25 @@ func _make_flag(col: Color) -> Node3D:
 	ring.position = Vector3(0, 0.3, 0)
 	ring.scale = Vector3(1, 0.15, 1)
 	root.add_child(ring)
+	root.set_meta("steam_t", 0.0)
 	_bounce(root)
 	return root
 
 
+## Le battute della nonna al pentolone. Ironia di casa, niente di più.
+const NONNA_QUIPS := ["È PRONTO!", "Mangia, che sei sciupato!", "Prima le mani!", "Chi ha il 47?", "Non si assaggia!",
+	"C'è anche per i nemici. Se chiedono per favore", "Mettiti la maglia!", "Il bis dopo la battaglia", "Chi ha toccato il mestolo?",
+	"La mucca è prima di te", "Piano, che scotta!"]
+
+
+## Dove la mucca ha il collo, nel suo spazio: lì va il bavaglino.
+func _cow_neck() -> Vector3:
+	return Vector3(0.0, 0.98, 2.02)
+
+
 func _wave_flag(node: Node3D) -> void:
-	var cloth := node.get_node_or_null("cloth") as Node3D
 	var t := _flag_t * 3.2
+	var cloth := node.find_child("cloth", true, false) as Node3D
 	var seg: Node = cloth.get_child(0) if cloth != null and cloth.get_child_count() > 0 else null
 	var k := 0
 	while seg != null:
@@ -1286,9 +1425,42 @@ func _wave_flag(node: Node3D) -> void:
 		seg = seg.get_child(seg.get_child_count() - 1) if seg.get_child_count() > 2 else null
 	var ring := node.get_node_or_null("ring") as Node3D
 	if ring != null:
-		var s := 1.0 + 0.12 * sin(_flag_t * 2.5)
+		var s := 1.0 + 0.08 * sin(_flag_t * 2.5)
 		ring.scale = Vector3(s, 0.15, s)
-		ring.rotation.y = _flag_t * 0.4
+	# il mestolo gira, il minestrone bolle, il fuoco tremola, la nonna dondola
+	var ladle := node.get_node_or_null("ladle") as Node3D
+	if ladle != null:
+		ladle.rotation.y = _flag_t * 1.6
+	var bits := node.get_node_or_null("bits") as Node3D
+	if bits != null:
+		bits.rotation.y = _flag_t * 1.6
+		bits.position.y = 1.98 + 0.04 * sin(_flag_t * 7.0)
+	var fire := node.get_node_or_null("fire") as Node3D
+	if fire != null:
+		for f in fire.get_child_count():
+			var fl := fire.get_child(f) as Node3D
+			fl.scale.y = 0.7 + 0.5 * absf(sin(_flag_t * 9.0 + f * 1.7))
+	var nonna := node.get_node_or_null("nonna") as Node3D
+	if nonna != null:
+		nonna.rotation.z = 0.06 * sin(_flag_t * 1.6)
+	var cow := node.get_node_or_null("cow") as Node3D
+	var bib := node.get_node_or_null("bib") as Node3D
+	if cow != null and bib != null:
+		cow.rotation.x = 0.04 * sin(_flag_t * 2.1)
+		# il bavaglino sta sul collo della mucca, ovunque guardi
+		bib.global_transform = cow.global_transform * Transform3D(Basis(), _cow_neck())
+	# battute della nonna e numeri dell'eliminacode
+	var qt: float = node.get_meta("quip_t", 2.0)
+	if _flag_t > qt:
+		node.set_meta("quip_t", _flag_t + randf_range(7.0, 11.0))
+		if nonna != null:
+			bubble_at(nonna.global_position + Vector3(0, 0.4, 0), NONNA_QUIPS[randi() % NONNA_QUIPS.size()], Color(0.45, 0.12, 0.1))
+
+	# vapore dal pentolone, ogni tanto
+	var st: float = node.get_meta("steam_t", 0.0)
+	if _flag_t > st:
+		node.set_meta("steam_t", _flag_t + randf_range(0.5, 0.9))
+		smoke(node.global_position + Vector3(randf_range(-0.4, 0.4), 2.3, randf_range(-0.4, 0.4)), 0.3, 1)
 
 
 ## Fila di puntini dalla porta alla bandiera del castello selezionato, che scorre verso la bandiera.

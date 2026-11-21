@@ -13,6 +13,7 @@ GODOT="/Applications/Godot 2.app/Contents/MacOS/Godot"
 "$GODOT" --path . -- --tutorial --house 1        # partita guidata passo passo
 "$GODOT" --path . -- --solo --house 1            # subito contro l'IA
 "$GODOT" --headless --path . -- --server         # server dedicato
+"$GODOT" --path . -- --ospita --house 1          # ospita: sala d'attesa, poi «Avvia la partita»
 "$GODOT" --path . -- --connect 192.168.1.10      # entra in una partita
 "$GODOT" --path . -- --scena-re                 # solo la scena del re sul gabinetto, a ripetizione
 "$GODOT" --path . -- --finale --house 4          # solo il finale di chi vince, a ripetizione
@@ -20,9 +21,9 @@ GODOT="/Applications/Godot 2.app/Contents/MacOS/Godot"
 
 Casate (`--house`): 0 Savoia (Torino), 1 Visconti (Milano), 2 Serenissima (Venezia), 3 Superba (Repubblica di Genova), 4 Fiorentini (Repubblica di Firenze), 5 Papato (Roma), 6 Angioini (Napoli), 7 Aragonesi (Palermo), 8 Ruffo (Cosenza).
 
-L'Italia è quella del 1350, l'anno della Gazzetta. Oltre alle casate ci sono le signorie minori, che non giocano ma tengono i loro castelli finché qualcuno non li prende: gli Este a Ferrara e Modena, gli Scaligeri a Verona, i Malatesta a Rimini e Ancona, i Pepoli a Bologna, il Giudicato d'Arborea a Oristano e la Corona d'Aragona a Cagliari. Bari resta un Comune libero. Le posizioni sono vicine al vero ma non esatte: fra due castelli restano almeno 125 voxel, e per questo Mantova, Padova e Urbino non ci sono.
+L'Italia è quella del 1350, l'anno della Gazzetta. Oltre alle casate ci sono le signorie minori che contano, che non giocano ma tengono i loro castelli finché qualcuno non li prende: gli Este a Ferrara, i Malatesta ad Ancona, il Giudicato d'Arborea a Oristano e la Corona d'Aragona a Cagliari. Bari resta un Comune libero. Le posizioni sono vicine al vero ma non esatte: la pianura non deve diventare troppo fitta, quindi al nord fra due castelli restano almeno 139 voxel, e Bologna, Modena, Verona, Mantova, Padova e Rimini non ci sono.
 
-**Online:** chi ospita apre la porta UDP 27015 sul router. Sulla stessa rete locale basta l'IP. Si può entrare a partita iniziata: si prende il posto dell'IA di una casata; chi esce viene rimpiazzato dall'IA.
+**Online:** chi ospita apre la porta UDP 27015 sul router. Sulla stessa rete locale basta l'IP. Chi ospita entra in una sala d'attesa: la mappa c'è ma il tempo è fermo, e una scheda mostra chi è collegato e chi è pronto. Chi entra preme «Sono pronto»; quando lo sono tutti, chi ospita preme «Avvia la partita» e si parte insieme. Si può entrare a partita iniziata: si prende il posto dell'IA di una casata; chi esce viene rimpiazzato dall'IA.
 
 ### Comandi
 
@@ -35,12 +36,12 @@ L'Italia è quella del 1350, l'anno della Gazzetta. Oltre alle casate ci sono le
 | Clic destro | Muovi e attacca. Su un muro nemico, catapulte e bombarde lo bersagliano |
 | T o F2 / Spazio | Tutta l'armata, frati esclusi / torna al castello |
 | Ctrl+1-0 / Maiusc+1-0 / 1-0 | Crea un gruppo (soldati o castello) / aggiungi / riprendilo; due volte porta la vista lì |
-| Backspace (Maiusc: indietro) | Il prossimo tuo castello, selezionato e inquadrato |
-| Clic destro con un tuo castello selezionato | Bandiera di raduno: le reclute di quel castello vanno lì. Clic destro sul castello stesso la toglie |
-| P | Togli la bandiera di raduno del castello selezionato |
+| Tab (Maiusc: indietro; va anche Backspace) | Il prossimo tuo castello, selezionato e inquadrato |
+| Clic destro con un tuo castello selezionato | Punto di raduno: la nonna mette su il pentolone e le reclute di quel castello vanno lì. Clic destro sul castello stesso lo spegne |
+| P | Spegni il pentolone di raduno del castello selezionato |
 | Z X C V B | Poteri (Parmigiano, Vino, Terremoto, Scudo, Mucche), poi clic sul bersaglio |
 | F | Potere della casata |
-| G, R, M, O | Difesa del castello selezionato: balestrieri sulle mura, ripara, mangano, olio bollente |
+| G, R, M, O | Difesa del castello selezionato: balestrieri sulle mura, ripara tutto, mangano, olio bollente |
 | Esc | Annulla, poi pausa: salva, impostazioni, esci |
 | F1 | Guida ed esci al menu |
 
@@ -56,7 +57,7 @@ Recluta dal castello con i fiorini, porta l'armata al nemico ed entra nel cortil
 
 **Assedio.** Le mura hanno un vero supporto strutturale: ciò che si stacca dal terreno cade come corpo rigido e schiaccia ciò che colpisce. La fanteria cerca la strada più breve, passa dalle brecce appena si aprono e altrimenti abbatte la porta.
 
-**Difesa.** Torri e mastio tirano da soli (prima alle macchine d'assedio) finché reggono; il mangano del mastio tira da solo dove i nemici sono ammassati e l'olio bollente cade da solo su chi si accalca sotto le mura; balestrieri sulle mura con +35% di gittata; riparazione a 0,5 fiorini per blocco; mangano sul mastio; olio bollente.
+**Difesa.** Torri e mastio tirano da soli (prima alle macchine d'assedio) finché reggono; il mangano del mastio tira da solo dove i nemici sono ammassati e l'olio bollente cade da solo su chi si accalca sotto le mura; balestrieri sulle mura con +35% di gittata; «Ripara tutto»: si paga subito 0,5 fiorini per blocco mancante e i muratori ricostruiscono 40 blocchi al secondo (10 sotto attacco), con l'avanzamento sul pulsante; finché non hanno finito non si riclicca; mangano sul mastio; olio bollente.
 
 **Nessuno è al sicuro.** L'IA sceglie il bersaglio più vicino, ma un castello che nessuno disturba da più di 2 minuti le sembra via via più vicino (fino a un terzo della distanza dopo 8 minuti). Così anche Palermo, sola sull'isola, prima o poi riceve visite.
 
@@ -91,12 +92,15 @@ Il server è autoritativo: i client inviano comandi validati e ricevono snapshot
 ```bash
 "$GODOT" --headless --path . -s tests/rules.gd        # regole: conquista, vittoria, crateri, riparazioni
 "$GODOT" --headless --path . -s tests/campaign.gd     # storia: elenco, giornali, sblocchi missione per missione, vittorie e progressi
-"$GODOT" --headless --path . -s tests/controls.gd     # gruppi, Backspace, tasti dei poteri, squadre, pannello difesa (senza finestra)
+"$GODOT" --headless --path . -s tests/news_skip.gd     # contro l'IA il giornale si chiude subito (pulsante, Spazio, Esc, Invio)
+"$GODOT" --headless --path . -s tests/controls.gd     # gruppi, Tab, tasti dei poteri, squadre, pannello difesa (senza finestra)
 "$GODOT" --headless --path . -s tests/campaign_bot.gd -- 10   # un bot gioca la missione (1-12) a 6x: raduno, arieti, poteri
 "$GODOT" --headless --path . -s tests/ui_flow.gd -- CARTELLA   # end-to-end con mouse e tastiera sintetici (senza finestra niente foto)
 "$GODOT" --path . -s tests/tutorial_flow.gd -- CARTELLA  # il tutorial giocato dall'inizio alla fine
 "$GODOT" --path . -- --demo --shots CARTELLA          # assedio con screenshot e FPS
 tests/net_test.sh                                     # server + 2 client: mondi identici byte per byte
+tests/lobby_net.sh                                    # chi ospita aspetta, l'amico dice «pronto», si parte
+"$GODOT" --headless --path . -s tests/lobby.gd        # sala d'attesa: tempo fermo, Avvia solo con tutti pronti
 "$GODOT" --headless --path . -s tests/stuck.gd -- --seed 1   # truppe incastrate in una partita tra IA (limite 1%)
 "$GODOT" --headless --path . -s tests/pressure.gd -- --seeds 3 --min 30   # quanto è attaccato ogni castello (nessuno deve restare a zero)
 "$GODOT" --headless --path . -s tests/matchups.gd     # scontri a parità di fiorini: le picche fermano i cavalieri, l'IA risponde
@@ -105,7 +109,7 @@ tests/net_test.sh                                     # server + 2 client: mondi
 "$GODOT" --path . -s tests/menu_shots.gd -- CARTELLA      # il menu principale sull'Italia in voxel
 "$GODOT" --path . -s tests/finale_shots.gd -- CARTELLA    # il finale di chi vince, inquadratura per inquadratura
 "$GODOT" --path . -s tests/shops_shots.gd -- CARTELLA     # le sei botteghe, i loro personaggi e il menu
-"$GODOT" --path . -s tests/rally_shots.gd -- CARTELLA     # bandiera di raduno, reclute che ci vanno, signorie minori
+"$GODOT" --path . -s tests/rally_shots.gd -- CARTELLA     # pentolone di raduno, reclute che ci vanno, signorie minori
 "$GODOT" --path . -s tests/fun_shots.gd -- CARTELLA       # sagra, fumetti, sciopero, sfottò
 "$GODOT" --path . -s tests/menu_panels.gd -- CARTELLA     # caricamento, menu, impostazioni, pausa
 "$GODOT" --headless --path . -s tests/castle_layout.gd  # castelli sulla terraferma, distanziati, signorie minori

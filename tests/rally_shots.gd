@@ -39,13 +39,17 @@ func _run() -> void:
 	g.ctrl.target_dist = 28.0
 	await create_timer(1.2).timeout
 	await shot(out, "r_vicino")
+	# la nonna parla ogni 7-11 secondi: qualche scatto per beccare il fumetto
+	for k in 6:
+		await create_timer(2.0).timeout
+		await shot(out, "r_nonna_%d" % k)
 	# una signoria minore: Ferrara degli Este
-	g.ctrl.selected_castle = 13
-	g.ctrl.focus = g.castles[13].center
+	g.ctrl.selected_castle = 4
+	g.ctrl.focus = g.castles[4].center
 	g.ctrl.target_dist = 120.0
 	await create_timer(1.5).timeout
 	await shot(out, "r_ferrara")
-	# la pianura dall'alto: Milano, Verona, Modena, Bologna, Ferrara, Venezia
+	# la pianura dall'alto: Milano, Genova, Ferrara, Firenze, Venezia
 	g.ctrl.selected_castle = -1
 	g.ctrl.focus = g.castles[4].center + Vector3(0, 0, -80)
 	g.ctrl.target_dist = 420.0

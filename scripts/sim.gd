@@ -22,6 +22,8 @@ class U:
 	var attacking := false
 	var water := false
 	var drunk := 0.0
+	## Spaventato dal terremoto: colpisce a metà forza e più piano finché dura.
+	var fear := 0.0
 	var shield := false
 	var garrison := false
 	var pass_gate := false
@@ -98,6 +100,8 @@ var ai_aggression := 1.0
 var ai_enabled := true
 ## Pausa (solo partite contro l'IA, dal menu di pausa).
 var paused := false
+## Sala d'attesa di chi ospita: il mondo c'è, ma il tempo non scorre finché non si avvia la partita.
+var lobby := false
 ## Difficoltà: rendita dell'IA rispetto a un umano e moltiplicatore del suo esercito massimo.
 var ai_income := 0.8
 var ai_cap_mult := 1.0
@@ -121,8 +125,11 @@ var next_bid := 1
 ## Le torri più alte vedono un po' più lontano.
 const TOWER_EXTRA := 5.0 * (CS - 1)
 ## Sotto attacco la riparazione va a un quarto: aiuta a resistere ma non annulla le catapulte.
-const REPAIR_PER_TICK := 26
-const REPAIR_PER_TICK_ATTACKED := 7
+## «Ripara tutto»: si paga subito, 0,5 fiorini per blocco mancante, e i muratori ci mettono il tempo che serve.
+const REPAIR_COST := 0.5
+const REPAIR_PER_SEC := 40.0
+## Sotto attacco i muratori lavorano a un quarto della velocità.
+const REPAIR_PER_SEC_ATTACKED := 10.0
 ## Primi due minuti di tregua: nessuna IA attacca, tutti hanno tempo di prepararsi.
 const TRUCE_TIME := 120.0
 const AI_GUARD := 4
@@ -318,6 +325,11 @@ func setup(g: Node, castle_defs: Array) -> void:
 		c.oil_cd = 0.0
 		c.repair = false
 		c.repair_i = 0
+		c.repair_left = 0
+		c.repair_total = 0
+		c.repair_acc = 0.0
+		c.repair_found = false
+		c.missing = 0
 		c.quiet_t = 0.0
 		c.flag = Vector3.ZERO
 		c.flag_on = false
@@ -509,11 +521,21 @@ func cmd_rally(team: int, cid: int, p: Vector3) -> void:
 		c.flag_on = false
 		return
 	if on >= 0 and at_peace(team, int(castles[on].owner)):
-		game.msg_house(team, "Tregua: %s non si attacca ancora. Pianta la bandiera altrove" % castles[on].name, UiStyle.DANGER_TEXT)
+		game.msg_house(team, "Tregua: %s non si attacca ancora. Metti il pentolone altrove" % castles[on].name, UiStyle.DANGER_TEXT)
 		return
 	p.y = float(world.top_y(int(p.x), int(p.z)))
+	# accanto al pentolone di un altro tuo castello: ci si unisce, un pentolone solo
+	for o: Dictionary in castles:
+		if o.id != cid and int(o.owner) == team and bool(o.get("flag_on", false)) and Vector2(p.x - o.flag.x, p.z - o.flag.z).length() < RALLY_JOIN_R:
+			p = o.flag
+			game.msg_house(team, "Più siamo, meglio è! Le reclute di %s vanno al pentolone di %s" % [c.name, o.name], UiStyle.GOLD)
+			break
 	c.flag = p
 	c.flag_on = true
+
+
+## Entro questa distanza da un pentolone che c'è già, il nuovo si unisce a quello.
+const RALLY_JOIN_R := 8.0
 
 
 ## La bandiera torna al castello: le reclute restano davanti alla porta.
@@ -566,11 +588,38 @@ func cmd_garrison(team: int, cid: int) -> void:
 		u.has_order = false
 
 
+## «Ripara tutto il castello»: conta i blocchi mancanti, fa pagare subito tutto il conto e avvia i lavori.
+## Finché i lavori non sono finiti non si riclicca.
 func cmd_repair(team: int, cid: int) -> void:
 	var c: Dictionary = castles[cid]
-	if c.owner == team:
-		c.repair = not c.repair
-		c.repair_i = 0
+	if c.owner != team or bool(c.repair):
+		return
+	_update_integrity(c)
+	var n: int = c.missing
+	if n <= 0:
+		game.msg_house(team, "Le mura di %s sono intatte" % c.name, UiStyle.MUTED)
+		return
+	var cost := repair_cost(n)
+	if float(houses[team].gold) < cost:
+		game.msg_house(team, "Per riparare tutto %s servono %d fiorini" % [c.name, cost], UiStyle.DANGER_TEXT)
+		return
+	houses[team].gold = float(houses[team].gold) - cost
+	houses[team].repair_spent = float(houses[team].repair_spent) + cost
+	c.repair = true
+	c.repair_total = n
+	c.repair_left = n
+	c.repair_i = 0
+	c.repair_acc = 0.0
+	c.repair_found = false
+	game.msg_house(team, "Muratori al lavoro a %s: %d blocchi, %d fiorini, circa %d secondi" % [c.name, n, cost, repair_secs(n)], UiStyle.GOLD)
+
+
+static func repair_cost(blocks: int) -> int:
+	return ceili(blocks * REPAIR_COST)
+
+
+static func repair_secs(blocks: int) -> int:
+	return maxi(ceili(blocks / REPAIR_PER_SEC), 1)
 
 
 func cmd_mangano(team: int, cid: int, p: Vector3) -> void:
@@ -767,7 +816,8 @@ func _physics_process(dt: float) -> void:
 		_accum -= step
 		if _accum > step * 3.0:
 			_accum = 0.0
-		tick(step)
+		if not lobby:
+			tick(step)
 	_snap_t += dt
 	if _snap_t >= 0.1:
 		_snap_t = 0.0
@@ -1148,6 +1198,8 @@ func _tick_unit(u: U, dt: float) -> void:
 			u.moving = false
 			_settle(u, dt)
 			return
+	if u.fear > 0.0:
+		u.fear -= dt
 	if u.drunk > 0.0:
 		u.drunk -= dt
 	u.moving = false
@@ -1200,7 +1252,7 @@ func _tick_unit(u: U, dt: float) -> void:
 			u.yaw = atan2(aim.x - u.pos.x, aim.z - u.pos.z)
 			u.attacking = true
 			if u.cd <= 0.0:
-				u.cd = float(d.cd) * (0.7 if u.drunk > 0.0 else 1.0)
+				u.cd = float(d.cd) * (0.7 if u.drunk > 0.0 else 1.0) * (FEAR_CD if u.fear > 0.0 else 1.0)
 				_ranged_attack(u, aim, d)
 			_settle(u, dt)
 			return
@@ -1215,8 +1267,8 @@ func _tick_unit(u: U, dt: float) -> void:
 				u.yaw = atan2(u.tgt.pos.x - u.pos.x, u.tgt.pos.z - u.pos.z)
 				u.attacking = true
 				if u.cd <= 0.0:
-					u.cd = float(d.cd) * (0.7 if u.drunk > 0.0 else 1.0)
-					var dmg: float = float(d.dmg) * (1.5 if u.drunk > 0.0 else 1.0) * (Defs.BARD_FACTOR if u.sung else 1.0) * _stat(u.team, Defs.STAT_FORZA)
+					u.cd = float(d.cd) * (0.7 if u.drunk > 0.0 else 1.0) * (FEAR_CD if u.fear > 0.0 else 1.0)
+					var dmg: float = float(d.dmg) * (1.5 if u.drunk > 0.0 else 1.0) * (Defs.BARD_FACTOR if u.sung else 1.0) * (FEAR_DMG if u.fear > 0.0 else 1.0) * _stat(u.team, Defs.STAT_FORZA)
 					if u.type == Defs.FANTE and u.tgt.type == Defs.CAVALIERE:
 						dmg *= Defs.PIKE_VS_HORSE
 					_hurt(u.tgt, dmg, u.type)
@@ -1239,7 +1291,7 @@ func _tick_unit(u: U, dt: float) -> void:
 				u.yaw = atan2(aim.x - u.pos.x, aim.z - u.pos.z)
 				u.attacking = true
 				if u.cd <= 0.0:
-					u.cd = float(d.cd) * (0.7 if u.drunk > 0.0 else 1.0)
+					u.cd = float(d.cd) * (0.7 if u.drunk > 0.0 else 1.0) * (FEAR_CD if u.fear > 0.0 else 1.0)
 					if ranged:
 						_arrow(u.pos + Vector3(0, 1.4, 0), aim + Vector3(0, 1.0, 0))
 					_hit_building(bd, u, 1 if ranged else (5 if u.type == Defs.NONNA else (1 if u.type == Defs.CAVALIERE else 3)))
@@ -1262,8 +1314,8 @@ func _tick_unit(u: U, dt: float) -> void:
 				u.yaw = atan2(kp.x - u.pos.x, kp.z - u.pos.z)
 				u.attacking = true
 				if u.cd <= 0.0:
-					u.cd = float(d.cd) * (0.7 if u.drunk > 0.0 else 1.0)
-					var kdmg: float = float(d.dmg) * (1.5 if u.drunk > 0.0 else 1.0) * (Defs.BARD_FACTOR if u.sung else 1.0) * _stat(u.team, Defs.STAT_FORZA)
+					u.cd = float(d.cd) * (0.7 if u.drunk > 0.0 else 1.0) * (FEAR_CD if u.fear > 0.0 else 1.0)
+					var kdmg: float = float(d.dmg) * (1.5 if u.drunk > 0.0 else 1.0) * (Defs.BARD_FACTOR if u.sung else 1.0) * (FEAR_DMG if u.fear > 0.0 else 1.0) * _stat(u.team, Defs.STAT_FORZA)
 					if u.type == Defs.CAVALIERE:
 						kdmg *= Defs.HORSE_VS_KING
 					if ranged:
@@ -1373,7 +1425,7 @@ func _ranged_attack(u: U, aim: Vector3, d: Dictionary) -> void:
 		var from := u.pos + Vector3(0, 1.6, 0)
 		_arrow(from, aim)
 		if u.tgt != null:
-			_hurt(u.tgt, float(d.dmg) * (1.5 if u.drunk > 0.0 else 1.0) * (Defs.BARD_FACTOR if u.sung else 1.0) * _stat(u.team, Defs.STAT_FORZA)
+			_hurt(u.tgt, float(d.dmg) * (1.5 if u.drunk > 0.0 else 1.0) * (Defs.BARD_FACTOR if u.sung else 1.0) * (FEAR_DMG if u.fear > 0.0 else 1.0) * _stat(u.team, Defs.STAT_FORZA)
 				* (Defs.BOLT_VS_HORSE if u.tgt.type == Defs.CAVALIERE else 1.0), u.type)
 	elif u.type == Defs.CATAPULTA:
 		var spread := Vector3(rng.randf_range(-1.2, 1.2), rng.randf_range(-0.6, 0.6), rng.randf_range(-1.2, 1.2))
@@ -2048,9 +2100,21 @@ func _run_sched(e: Dictionary) -> void:
 			_quake_pulse(p, e.team)
 
 
+## Il terremoto spaventa chi difende: per 10 secondi colpisce a metà forza e attacca più piano.
+const FEAR_T := 10.0
+const FEAR_DMG := 0.5
+const FEAR_CD := 1.4
+
+
 ## Scossa: indebolisce la base delle strutture, il resto crolla per gravità.
+## I nemici nel cerchio si spaventano (vedi FEAR_T): la paura parte alla prima scossa che li prende.
 func _quake_pulse(p: Vector3, team: int) -> void:
 	const QR := 24
+	for u in ulist:
+		if u.team != team and u.hp > 0.0 and u.fear <= 0.0 and not at_peace(team, u.team) and Vector2(u.pos.x - p.x, u.pos.z - p.z).length() < QR:
+			u.fear = FEAR_T
+			if rng.randf() < 0.2:
+				_say(u, Defs.SAY_PANICO, true)
 	var removed := PackedInt32Array()
 	for z in range(int(p.z) - QR, int(p.z) + QR + 1):
 		for x in range(int(p.x) - QR, int(p.x) + QR + 1):
@@ -2508,14 +2572,24 @@ func _capture(c: Dictionary, team: int) -> void:
 	_check_winner()
 
 
-func _repair(c: Dictionary, _dt: float) -> void:
-	var h: Dictionary = houses[c.owner]
+func _repair(c: Dictionary, dt: float) -> void:
 	var bp: PackedInt64Array = c.blueprint
+	var rate := REPAIR_PER_SEC_ATTACKED if repair_slow_when_attacked and c.under_attack else REPAIR_PER_SEC
+	c.repair_acc = float(c.get("repair_acc", 0.0)) + rate * dt
+	var budget := mini(int(c.repair_acc), int(c.repair_left))
+	c.repair_acc = float(c.repair_acc) - float(budget)
 	var edits := PackedInt64Array()
 	var i: int = c.repair_i
 	var scanned := 0
-	var limit: int = REPAIR_PER_TICK_ATTACKED if repair_slow_when_attacked and c.under_attack else REPAIR_PER_TICK
-	while i < bp.size() and edits.size() < limit and scanned < 3000 and h.gold >= 1.0:
+	var done := false
+	while edits.size() < budget and scanned < 3000:
+		if i >= bp.size():
+			# giro completo senza buchi: non c'è altro da fare (il resto pagato torna indietro)
+			if not bool(c.repair_found):
+				done = true
+				break
+			c.repair_found = false
+			i = 0
 		var e: int = bp[i]
 		var idx: int = e >> Defs.EDIT_SHIFT
 		var mat: int = e & Defs.EDIT_MASK
@@ -2523,28 +2597,24 @@ func _repair(c: Dictionary, _dt: float) -> void:
 			if mat >= Defs.TEAM0:
 				mat = Defs.TEAM0 + int(c.owner)
 			edits.append((idx << Defs.EDIT_SHIFT) | mat)
-			h.gold -= 0.5
-			h.repair_spent = float(h.repair_spent) + 0.5
+			c.repair_found = true
 		i += 1
 		scanned += 1
-	# fiorini finiti con lavoro ancora da fare: la riparazione si ferma invece di
-	# divorare ogni fiorino che arriva (il giocatore non capiva dove finivano)
-	var broke: bool = h.gold < 1.0 and i < bp.size()
-	if i >= bp.size():
-		i = 0
-		if edits.is_empty():
-			c.repair = false
 	c.repair_i = i
+	c.repair_left = int(c.repair_left) - edits.size()
 	if not edits.is_empty():
 		if not stats.is_empty():
 			stats.repaired += edits.size()
 		game.push_edits(edits, false)
 		_mark_fields(c.center)
 		game.fx_all("repair", c.center, 1.0)
-	if broke:
+	if int(c.repair_left) <= 0 or done:
+		if done and int(c.repair_left) > 0:
+			houses[c.owner].gold = float(houses[c.owner].gold) + float(c.repair_left) * REPAIR_COST
 		c.repair = false
-		c.repair_i = 0
-		game.msg_house(c.owner, "Riparazione di %s sospesa: fiorini finiti" % c.name, UiStyle.DANGER_TEXT)
+		c.repair_left = 0
+		_update_integrity(c)
+		game.msg_house(c.owner, "Mura di %s riparate" % c.name, UiStyle.GOLD)
 
 
 func _update_integrity(c: Dictionary) -> void:
@@ -2555,6 +2625,7 @@ func _update_integrity(c: Dictionary) -> void:
 		if world.vox[e >> Defs.EDIT_SHIFT] != 0:
 			alive += 1
 	c.integrity = float(alive) / maxf(total, 1.0)
+	c.missing = total - alive
 
 
 func _check_winner() -> void:
@@ -2819,7 +2890,8 @@ func state_array() -> Array:
 		if not q.is_empty():
 			var first: Dictionary = c.queue[0]
 			q_prog = 1.0 - float(first.t) / float(Defs.UNITS[first.type].time)
-		cs.append([c.owner, snappedf(c.capture, 0.01), c.capture_by, snappedf(c.integrity, 0.01), c.repair, snappedf(c.shot_cd, 0.1), snappedf(c.oil_cd, 0.1), c.under_attack, q, snappedf(q_prog, 0.01), c.flag if c.get("flag_on", false) else null])
+		cs.append([c.owner, snappedf(c.capture, 0.01), c.capture_by, snappedf(c.integrity, 0.01), c.repair, snappedf(c.shot_cd, 0.1), snappedf(c.oil_cd, 0.1), c.under_attack, q, snappedf(q_prog, 0.01), c.flag if c.get("flag_on", false) else null,
+			snappedf(1.0 - float(c.get("repair_left", 0)) / maxf(float(c.get("repair_total", 0)), 1.0), 0.01) if c.repair else 0.0, int(c.get("missing", 0))])
 	var hs: Array = []
 	for hi in houses.size():
 		var h: Dictionary = houses[hi]
@@ -3238,8 +3310,8 @@ func _ai_build(t: int, own: Array) -> void:
 
 # ---------------------------------------------------------------- salvataggio
 const CASTLE_SAVE := ["owner", "capture", "capture_by", "queue", "tower_cd", "shot_cd", "oil_cd", "repair", "repair_i",
-	"integrity", "militia_t", "under_attack", "king_hp", "king_calm", "king_safe", "king_by", "king_quip_t", "auto_oil_cd", "quiet_t", "flag", "flag_on"]
-const UNIT_SAVE := ["id", "type", "team", "pos", "target", "home", "has_order", "goal", "hp", "cd", "yaw", "drunk",
+	"integrity", "missing", "repair_left", "repair_total", "repair_acc", "repair_found", "militia_t", "under_attack", "king_hp", "king_calm", "king_safe", "king_by", "king_quip_t", "auto_oil_cd", "quiet_t", "flag", "flag_on"]
+const UNIT_SAVE := ["id", "type", "team", "pos", "target", "home", "has_order", "goal", "hp", "cd", "yaw", "drunk", "fear",
 	"garrison", "sleep", "btgt", "vox_t", "vox_pos", "water", "feast", "feast_pos", "flee", "flee_pos"]
 
 

@@ -102,7 +102,7 @@ func _news_text() -> String:
 		out.append(Defs.BUILDINGS[b].name)
 	for p: int in u.get("powers", []):
 		out.append("%s (%s)" % [Defs.POWERS[p].name, Defs.POWERS[p].key])
-	if u.get("groups", false): out.append("gruppi Ctrl+1-0 e Backspace")
+	if u.get("groups", false): out.append("gruppi Ctrl+1-0 e Tab")
 	if u.get("faith", false): out.append("la Fede")
 	if u.get("special", false): out.append("il potere della casata (F)")
 	if u.get("events", false): out.append("gli eventi a sorpresa")

@@ -2,6 +2,7 @@ extends Node
 ## Punto di ingresso: menu oppure avvio diretto da riga di comando.
 ##   -- --server [--port N]        server dedicato (anche --headless)
 ##   -- --connect IP [--house N]   entra direttamente in una partita
+##   -- --ospita [--house N]       ospita una partita: sala d'attesa, poi «Avvia la partita»
 ##   -- --solo [--house N]         partita in solitaria immediata
 ##   -- --tutorial [--house N]     partita guidata (il vecchio tutorial)
 ##   -- --missione N               la missione N della storia
@@ -32,6 +33,10 @@ func _ready() -> void:
 	var pname := _opt(a, "--name", "")
 	if "--server" in a or "--test-server" in a:
 		_start_game().start_dedicated(_opt(a, "--port", str(Defs.PORT)).to_int(), a)
+	elif "--ospita" in a:
+		var hg: Node = _start_game()
+		hg.test_args = a
+		hg.start_host(_opt(a, "--port", str(Defs.PORT)).to_int(), pref, pname)
 	elif "--connect" in a:
 		_start_game().start_client(_opt(a, "--connect", "127.0.0.1"), _opt(a, "--port", str(Defs.PORT)).to_int(), pref, pname, a)
 	elif "--missione" in a:

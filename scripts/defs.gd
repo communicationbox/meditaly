@@ -100,16 +100,18 @@ const HOUSES := [
 ## lord: la famiglia che nel 1350 tiene un castello senza casata giocabile (le signorie minori).
 ## Combatte come i Comuni liberi, ma il castello porta il suo nome e il suo colore nello stemma;
 ## lord_of è come lo si dice («degli Este»), lord_title chi siede sul gabinetto del mastio.
-## Le posizioni sono vicine al vero ma non esatte: fra un castello e l'altro devono restare almeno
-## 125 voxel, se no mura e borghi si pestano i piedi (Mantova, Padova e Urbino non ci stanno).
+## Le posizioni sono vicine al vero ma non esatte: fra un castello e l'altro restano almeno 125 voxel
+## (al nord almeno 139), se no mura e borghi si pestano i piedi e la pianura diventa troppo fitta.
+## Per questo delle signorie del Nord c'è solo Ferrara (Este), al posto di Bologna e con il suo indice:
+## Bologna, Modena, Verona, Mantova, Padova e Rimini no.
 ## I nuovi castelli vanno in fondo: campagna e test usano gli indici.
 const CASTLES := [
 	{"name": "Torino", "lon": 7.35, "lat": 45.15, "house": 0, "wall": STONE, "gate": 2},
-	{"name": "Milano", "lon": 9.18, "lat": 45.46, "house": 1, "wall": BRICK, "gate": 0, "guard": 4},
-	{"name": "Venezia", "lon": 12.5, "lat": 45.72, "house": 2, "wall": MARBLE, "gate": 3},
+	{"name": "Milano", "lon": 9.6, "lat": 45.75, "house": 1, "wall": BRICK, "gate": 0, "guard": 4},
+	{"name": "Venezia", "lon": 12.75, "lat": 45.75, "house": 2, "wall": MARBLE, "gate": 3},
 	{"name": "Genova", "lon": 8.85, "lat": 44.55, "house": 3, "wall": STONE2, "gate": 1, "guard": 9},
-	{"name": "Bologna", "lon": 11.17, "lat": 44.29, "house": NEUTRAL, "lord": "Pepoli", "lord_of": "dei Pepoli", "lord_title": "il Signore", "lord_color": Color(0.80, 0.80, 0.78), "wall": BRICK, "gate": 1},
-	{"name": "Firenze", "lon": 11.3, "lat": 43.42, "house": 4, "wall": STONE, "gate": 1, "guard": 3},
+	{"name": "Ferrara", "lon": 11.6, "lat": 44.62, "house": NEUTRAL, "lord": "Este", "lord_of": "degli Este", "lord_title": "il Marchese", "lord_color": Color(0.30, 0.42, 0.80), "wall": BRICK, "gate": 1},
+	{"name": "Firenze", "lon": 11.3, "lat": 43.35, "house": 4, "wall": STONE, "gate": 1, "guard": 3},
 	{"name": "Ancona", "lon": 13.2, "lat": 43.45, "house": NEUTRAL, "lord": "Malatesta", "lord_of": "dei Malatesta", "lord_title": "il Signore", "lord_color": Color(0.45, 0.62, 0.30), "wall": BRICK, "gate": 3},
 	{"name": "Roma", "lon": 12.75, "lat": 41.85, "house": 5, "wall": MARBLE, "gate": 1, "guard": 7},
 	{"name": "Napoli", "lon": 14.3, "lat": 41.15, "house": 6, "wall": STONE2, "gate": 1},
@@ -117,11 +119,7 @@ const CASTLES := [
 	{"name": "Palermo", "lon": 13.5, "lat": 37.85, "house": 7, "wall": BRICK, "gate": 0},
 	{"name": "Cagliari", "lon": 9.15, "lat": 39.5, "house": NEUTRAL, "lord": "Corona d'Aragona", "lord_of": "della Corona d'Aragona", "lord_title": "il Viceré", "lord_color": Color(0.85, 0.70, 0.15), "wall": STONE2, "gate": 1, "guard": 6},
 	{"name": "Cosenza", "lon": 16.45, "lat": 39.3, "house": 8, "wall": STONE, "gate": 1},
-	{"name": "Ferrara", "lon": 12.0, "lat": 44.92, "house": NEUTRAL, "lord": "Este", "lord_of": "degli Este", "lord_title": "il Marchese", "lord_color": Color(0.30, 0.42, 0.80), "wall": BRICK, "gate": 0, "guard": 3},
-	{"name": "Modena", "lon": 10.33, "lat": 44.91, "house": NEUTRAL, "lord": "Este", "lord_of": "degli Este", "lord_title": "il Marchese", "lord_color": Color(0.30, 0.42, 0.80), "wall": BRICK, "gate": 2, "guard": 2},
-	{"name": "Verona", "lon": 11.14, "lat": 45.55, "house": NEUTRAL, "lord": "Scaligeri", "lord_of": "degli Scaligeri", "lord_title": "il Signore", "lord_color": Color(0.78, 0.15, 0.20), "wall": STONE2, "gate": 0, "guard": 3},
-	{"name": "Rimini", "lon": 12.36, "lat": 44.07, "house": NEUTRAL, "lord": "Malatesta", "lord_of": "dei Malatesta", "lord_title": "il Signore", "lord_color": Color(0.45, 0.62, 0.30), "wall": STONE, "gate": 3, "guard": 2},
-	{"name": "Oristano", "lon": 8.56, "lat": 40.26, "house": NEUTRAL, "lord": "Arborea", "lord_of": "del Giudicato d'Arborea", "lord_title": "il Giudice", "lord_color": Color(0.20, 0.55, 0.45), "wall": STONE2, "gate": 2, "guard": 3},
+	{"name": "Oristano", "lon": 8.62, "lat": 40.45, "house": NEUTRAL, "lord": "Arborea", "lord_of": "del Giudicato d'Arborea", "lord_title": "il Giudice", "lord_color": Color(0.20, 0.55, 0.45), "wall": STONE2, "gate": 2, "guard": 3},
 ]
 
 ## Il potere scemo di ogni casata (tasto F), stesso ordine di HOUSES. Niente Fede: solo l'attesa.
@@ -170,7 +168,7 @@ static func stat_mult(team: int, stat: int) -> float:
 const SAY_COLORS := [Color("b71c1c"), Color("6a1b9a"), Color("37474f"), Color("ad1457"), Color("a84300"), Color("1565c0"), Color("c2185b"), Color("1b6e20"), Color("5e35b1"), Color("5d4037"), Color("c62828"), Color("00695c"), Color("0277bd"), Color("b71c1c"), Color("1b6e20"), Color("37474f"), Color("1565c0"), Color("5d4037")]
 
 ## Coppie di castelli collegate da strade.
-const ROADS := [[0,1],[0,3],[1,3],[1,15],[15,2],[1,14],[14,15],[14,4],[4,13],[13,2],[13,15],[4,5],[3,5],[3,14],[4,16],[16,6],[5,6],[5,7],[6,7],[7,8],[8,9],[6,8],[8,12],[9,12],[11,17]]
+const ROADS := [[0,1],[0,3],[1,3],[1,2],[1,4],[2,4],[4,5],[3,5],[4,6],[5,6],[5,7],[6,7],[7,8],[8,9],[6,8],[8,12],[9,12],[11,13]]
 
 # ---------------------------------------------------------------- unità
 enum { FANTE, BALESTRIERE, CAVALIERE, ARIETE, CATAPULTA, BOMBARDA, FRATE, NONNA, MENESTRELLO, UNIT_TYPES }
@@ -279,7 +277,7 @@ enum { P_PARMIGIANO, P_VINO, P_TERREMOTO, P_SCUDO, P_MUCCHE, POWER_COUNT }
 const POWERS := [
 	{"name": "Forma di Parmigiano", "short": "Parmigiano", "cost": 60, "cd": 32.0, "key": "Z", "desc": "Una forma stagionata 36 mesi rotola sui nemici e apre una breccia"},
 	{"name": "Vino della Vittoria", "short": "Vino", "cost": 25, "cd": 18.0, "key": "X", "desc": "L'armata ubriaca è veloce, furiosa e stonata"},
-	{"name": "Terremoto", "short": "Terremoto", "cost": 70, "cd": 35.0, "key": "C", "desc": "Le mura tremano e crollano. Gli architetti giurano che erano a norma"},
+	{"name": "Terremoto", "short": "Terremoto", "cost": 70, "cd": 35.0, "key": "C", "desc": "Le mura tremano e crollano, e chi le difende se la fa sotto: per 10 secondi colpisce a metà forza. Gli architetti giurano che era tutto a norma"},
 	{"name": "Scudo Benedetto", "short": "Scudo", "cost": 40, "cd": 25.0, "key": "V", "desc": "Cupola d'oro che ferma i proiettili. Benedetta, con garanzia"},
 	{"name": "Mucche Kamikaze", "short": "Mucche", "cost": 35, "cd": 20.0, "key": "B", "desc": "Mucche dal cielo. Muuu. BOOM."},
 ]
@@ -372,7 +370,7 @@ const SAY := [
 	["Per {n}! E per la paga!", "{n} ha detto di correre", "Viva {n}, finché paga", "Se perdiamo è colpa di {n}", "{n}, guarda come picchio!", "Lo faccio per {n}. E per il pranzo", "{n} ci guarda: fingete di sapere cosa fate", "Avanti, {n} ha un piano. Forse", "{n} ci ha promesso le ferie", "Agli ordini di {n}, più o meno"],
 	["Manca il timbro", "Serve la marca da bollo", "Dove firmo?", "È il modulo sbagliato", "Torni martedì", "Qui ci vuole la copia rosa"],
 	["Lo spritz dopo, c'è il re da salvare", "Grazie, sono in servizio", "Il re prima di tutto. Poi il tagliere", "Non ora, stiamo difendendo", "Tenetemelo in fresco"],
-	["Presente!", "Eccomi, chi comanda?", "Sono arrivato primo, vale?", "Bella bandiera, chi l'ha cucita?", "E adesso? Si aspetta?", "Qui c'è anche l'ombra", "Chi ha portato il pranzo?"],
+	["Presente! Cosa c'è di buono?", "Nonna, c'è il bis?", "Che profumino!", "Io porto il pane", "Minestrone? Ancora?", "Prima si mangia, poi si combatte", "Sono arrivato primo: mi spetta il mestolo"],
 ]
 ## Sfottò fra giocatori: pulsanti sopra la minimappa. Il server li manda a tutti.
 const TAUNTS := [

@@ -71,7 +71,7 @@ func _run() -> void:
 	await wait_s(0.5)
 	check("voltata pagina si gioca", not sim.paused and ms.running and not is_instance_valid(hud.paper_layer))
 	check("in missione 1 partono i suggerimenti", is_instance_valid(ms.hints))
-	check("l'obiettivo è scritto in alto (%s)" % ms.goal_lbl.text, ms.goal_lbl.text.contains("Bologna"))
+	check("l'obiettivo è scritto in alto (%s)" % ms.goal_lbl.text, ms.goal_lbl.text.contains("Ferrara"))
 	sim.equal_houses = false  # con «casate tutte uguali» il potere della casata non c'è proprio
 	sim.houses[H].gold = 5000.0
 	sim.houses[H].faith = 150.0

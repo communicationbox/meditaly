@@ -317,6 +317,12 @@ func _run() -> void:
 	# difese da tastiera sul castello
 	await key(KEY_SPACE)
 	c.selected_castle = 5
+	var fbp: PackedInt64Array = sim.castles[5].blueprint
+	var holes := PackedInt64Array()
+	for k in range(0, 120, 2):
+		holes.append((fbp[k] >> Defs.EDIT_SHIFT) << Defs.EDIT_SHIFT)
+	g.push_edits(holes, false)  # qualcosa da riparare
+	sim.houses[sim.castles[5].owner].gold = 999.0
 	await key(KEY_R)
 	await wait_frames(2)
 	check("R attiva la riparazione", sim.castles[5].repair == true)

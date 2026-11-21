@@ -53,6 +53,7 @@ var build_hint: Label
 var rally_row: Control
 var rally_lbl: Label
 var rally_btn: Button
+var rally_join_btn: Button
 var tab_bar: Control
 var tab_btns: Array[Button] = []
 var castle_tab := 0
@@ -183,7 +184,7 @@ func _top_bar() -> void:
 	var who := Button.new()
 	who.flat = true
 	who.focus_mode = Control.FOCUS_NONE
-	who.tooltip_text = "Vai al tuo castello (Spazio). Backspace: passa al prossimo"
+	who.tooltip_text = "Vai al tuo castello (Spazio). Tab: passa al prossimo"
 	who.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	who.pressed.connect(func(): game.ctrl.focus_home())
 	who.custom_minimum_size = Vector2(118, 28)
@@ -433,8 +434,10 @@ func _castle_panel() -> void:
 	rally_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rally_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	rr.add_child(rally_lbl)
-	rally_btn = UiStyle.button("Togli bandiera (%s)" % Controller.RALLY_CLEAR_KEY_NAME, "La bandiera di raduno torna al castello: le reclute aspettano davanti alla porta", func(): game.ctrl.clear_flag(), 0.0, 30.0)
+	rally_btn = UiStyle.button("Spegni il pentolone (%s)" % Controller.RALLY_CLEAR_KEY_NAME, "Il pranzo è finito: le reclute tornano ad aspettare davanti alla porta", func(): game.ctrl.clear_flag(), 0.0, 30.0)
 	rr.add_child(rally_btn)
+	rally_join_btn = UiStyle.button("", "Le reclute vanno al pentolone che c'è già: più siamo, meglio è!", func(): _join_rally(), 0.0, 30.0)
+	rr.add_child(rally_join_btn)
 	rally_row = rr
 	v.add_child(rr)
 	build_menu = PanelContainer.new()  # il vecchio riquadro a parte non c'è più: resta chiuso
@@ -462,8 +465,8 @@ func _castle_panel() -> void:
 	def_box = dp
 	_def_button(dg, "garrison", "mura", "Sulle mura", "G", "Balestrieri sui merli",
 		"I balestrieri vicini al castello salgono sulle mura: da lassù tirano il 35% più lontano", func(): game.send_cmd("garrison", [game.ctrl.selected_castle]))
-	_def_button(dg, "repair", "ripara", "Ripara le mura", "R", "0,5 fiorini a blocco",
-		"Ricostruisce ciò che è crollato, blocco per blocco: 0,5 fiorini l'uno (più lenta sotto attacco)", func(): game.send_cmd("repair", [game.ctrl.selected_castle]))
+	_def_button(dg, "repair", "ripara", "Ripara tutto", "R", "Mura intatte",
+		"Ricostruisce tutto ciò che è crollato. Si paga subito, 0,5 fiorini a blocco, e i muratori ci mettono il tempo che serve (sotto attacco quattro volte tanto). Finché non hanno finito non si riclicca", func(): game.send_cmd("repair", [game.ctrl.selected_castle]))
 	_def_button(dg, "mangano", "mangano", "Mangano", "M", "Pietra dove clicchi",
 		"Il mangano sul mastio tira un masso dove clicchi. Da solo mira dove i nemici sono ammassati", func(): game.ctrl.start_action("mangano", game.ctrl.selected_castle))
 	_def_button(dg, "oil", "olio", "Olio bollente", "O", "25 fiorini a colata",
@@ -563,12 +566,12 @@ const DEF_H := 44.0
 
 ## Un comando di difesa: icona, nome, tasto in alto a destra, e sotto cosa fa o fra quanto è pronto.
 ## Riga sotto il nome di un comando di difesa: lo stato se c'è, altrimenti cosa fa.
-func _def_state(key: String, state: String) -> void:
+func _def_state(key: String, state: String, warn := false) -> void:
 	var s: Label = def_subs[key]
 	var t: String = state if state != "" else String(s.get_meta("idle"))
 	if s.text != t:
 		s.text = t
-		s.add_theme_color_override("font_color", UiStyle.GOLD if state != "" else UiStyle.MUTED)
+	s.add_theme_color_override("font_color", UiStyle.DANGER_TEXT if warn else (UiStyle.GOLD if state != "" else UiStyle.MUTED))
 
 
 func _def_button(parent: Control, key: String, glyph: String, text: String, hotkey: String, sub_text: String, tip_text: String, cb: Callable) -> void:
@@ -871,10 +874,10 @@ Clic sinistro: seleziona, anche trascinando un riquadro
 Clic destro: manda i selezionati. Su un muro nemico, catapulte e bombarde lo colpiscono
 Doppio clic o Ctrl+clic su un soldato: tutti quelli del suo tipo sullo schermo          T o F2: tutta l'armata
 Ctrl+1-0: crea un gruppo (soldati o castello)     Maiusc+1-0: aggiungi     1-0: riprendilo, due volte per andarci
-Backspace: il prossimo tuo castello (Maiusc+Backspace: il precedente)          H: nascondi l'interfaccia
+Tab: il prossimo tuo castello (Maiusc+Tab: il precedente)          H: nascondi l'interfaccia
 Poteri: Z Parmigiano  X Vino  C Terremoto  V Scudo  B Mucche     F: potere della casata
-Difesa, con un tuo castello selezionato: G balestrieri sulle mura, R ripara, M mangano, O olio bollente
-Con un tuo castello selezionato, clic destro sulla mappa: bandiera di raduno, le reclute vanno lì. P (o clic destro sul castello): toglila""", 15, UiStyle.INK))
+Difesa, con un tuo castello selezionato: G balestrieri sulle mura, R ripara tutto, M mangano, O olio bollente
+Con un tuo castello selezionato, clic destro sulla mappa: il pentolone della nonna, le reclute si radunano lì. P (o clic destro sul castello): spegnilo""", 15, UiStyle.INK))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	row.add_child(UiStyle.button("Esci al menu", "Abbandona la partita", func(): game.get_parent().call_deferred("back_to_menu"), 180.0))
@@ -885,6 +888,103 @@ Con un tuo castello selezionato, clic destro sulla mappa: bandiera di raduno, le
 
 
 ## Menu di pausa (Esc): contro l'IA ferma anche la partita.
+# ---------------------------------------------------------------- sala d'attesa
+## Scheda in alto al centro: chi è collegato, chi è pronto, e il pulsante per partire.
+## Non copre la mappa: intanto ci si guarda attorno.
+var lobby_panel: PanelContainer
+var _lobby_rows: VBoxContainer
+var _lobby_btn: Button
+var _lobby_hint: Label
+
+
+func show_lobby() -> void:
+	if lobby_panel == null or not is_instance_valid(lobby_panel):
+		_build_lobby()
+	lobby_panel.visible = true
+	for ch in _lobby_rows.get_children():
+		ch.queue_free()
+	var me_ready := false
+	for row: Array in game.lobby_list:
+		var h: int = row[1]
+		var ready: bool = row[2]
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 10)
+		var dot := UiStyle.label("●", 18, Defs.HOUSES[h].color)
+		line.add_child(dot)
+		var who := UiStyle.label("%s%s" % [row[0], "  (ospita)" if row[3] else ""], 17, UiStyle.INK, true)
+		who.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		line.add_child(who)
+		line.add_child(UiStyle.label(String(Defs.HOUSES[h].name), 15, UiStyle.MUTED))
+		var st := UiStyle.label("pronto" if ready else "non ancora", 15, UiStyle.GOLD if ready else UiStyle.DANGER_TEXT, true)
+		st.custom_minimum_size.x = 90
+		st.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		line.add_child(st)
+		_lobby_rows.add_child(line)
+		if h == game.my_house:
+			me_ready = ready
+	var all_ready: bool = game.lobby_all_ready()
+	if game.is_server:
+		_lobby_btn.text = "Avvia la partita"
+		_lobby_btn.disabled = not all_ready
+		_lobby_hint.text = "Tutti pronti: si può partire" if all_ready else "Aspettiamo che siano tutti pronti"
+		_lobby_hint.text += ("" if game.lobby_list.size() > 1 else ". Gli amici entrano con il tuo indirizzo")
+	else:
+		_lobby_btn.text = "Non sono pronto" if me_ready else "Sono pronto"
+		_lobby_btn.disabled = false
+		_lobby_hint.text = "Parte quando chi ospita avvia la partita" if me_ready else "Premi quando sei pronto"
+	_lobby_btn.set_meta("ready", me_ready)
+
+
+func hide_lobby() -> void:
+	if lobby_panel != null and is_instance_valid(lobby_panel):
+		lobby_panel.queue_free()
+	lobby_panel = null
+
+
+func _build_lobby() -> void:
+	lobby_panel = PanelContainer.new()
+	var sb := UiStyle.panel_box(UiStyle.WALNUT, UiStyle.GOLD_DIM, 0)
+	sb.content_margin_left = 24
+	sb.content_margin_right = 24
+	sb.content_margin_top = 16
+	sb.content_margin_bottom = 16
+	sb.shadow_size = 18
+	sb.shadow_color = Color(0, 0, 0, 0.55)
+	lobby_panel.add_theme_stylebox_override("panel", sb)
+	lobby_panel.custom_minimum_size = Vector2(520, 0)
+	lobby_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	lobby_panel.offset_top = 90
+	lobby_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	lobby_panel.add_child(v)
+	v.add_child(UiStyle.label("Sala d'attesa", 26, UiStyle.GOLD, true))
+	_lobby_rows = VBoxContainer.new()
+	_lobby_rows.add_theme_constant_override("separation", 4)
+	v.add_child(_lobby_rows)
+	var foot := HBoxContainer.new()
+	foot.add_theme_constant_override("separation", 12)
+	_lobby_hint = UiStyle.label("", 14, UiStyle.MUTED)
+	_lobby_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_lobby_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	foot.add_child(_lobby_hint)
+	_lobby_btn = UiStyle.button("", "", _lobby_pressed, 210.0, 44.0)
+	UiStyle.style_button(_lobby_btn, Color(1.0, 0.76, 0.22), UiStyle.OUTLINE, Color(1.0, 0.86, 0.38))
+	for kk: String in ["font_color", "font_hover_color", "font_pressed_color"]:
+		_lobby_btn.add_theme_color_override(kk, PAPER_INK)
+	_lobby_btn.add_theme_font_size_override("font_size", 20)
+	foot.add_child(_lobby_btn)
+	v.add_child(foot)
+	root.add_child(lobby_panel)
+
+
+func _lobby_pressed() -> void:
+	if game.is_server:
+		game.lobby_start()
+	else:
+		game.lobby_set_ready(not bool(_lobby_btn.get_meta("ready", false)))
+
+
 var pause_panel: Control
 var _settings_panel: Control
 
@@ -1322,6 +1422,10 @@ func newspaper(ev: int, title: String, sub: String, picks: PackedInt32Array, sto
 	veil.color = Color(0.03, 0.02, 0.01, 0.62)
 	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	veil.mouse_filter = Control.MOUSE_FILTER_STOP
+	# un clic fuori dalla pagina volta pagina, come il pulsante
+	veil.gui_input.connect(func(e: InputEvent) -> void:
+		if e is InputEventMouseButton and (e as InputEventMouseButton).pressed and (e as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			skip_paper())
 	paper_layer = veil
 	root.add_child(veil)
 	var page := PanelContainer.new()
@@ -1440,6 +1544,8 @@ func newspaper(ev: int, title: String, sub: String, picks: PackedInt32Array, sto
 			sb2.add_theme_font_size_override("font_size", 22)
 			sb2.name = String(bt[0])
 			foot.add_child(sb2)
+			if first:
+				_paper_first = sb2
 			first = false
 	elif game.my_house >= 0:  # chi ospita senza giocare non ha nulla da girare
 		var cont := UiStyle.button("Volta pagina", "Riparte quando hanno girato pagina tutti", _resume_paper, 210.0, 46.0)
@@ -1462,6 +1568,28 @@ func newspaper(ev: int, title: String, sub: String, picks: PackedInt32Array, sto
 		_paper_tw.tween_callback(_close_paper).set_delay(Sim.NEWS_TIME - 0.55)
 	if game.fx and game.fx.sfx and game.ctrl and game.ctrl.cam:
 		game.fx.sfx.play("horn", game.ctrl.cam.global_position, 2.0, 0.0)
+
+
+var _paper_first: Button  # storia: il pulsante che si preme di solito («Si comincia»)
+
+
+## Giornale aperto: Esc, Spazio e Invio voltano pagina, come il pulsante.
+func _input(event: InputEvent) -> void:
+	if paper_layer == null or not is_instance_valid(paper_layer):
+		return
+	var k := event as InputEventKey
+	if k != null and k.pressed and not k.echo and k.keycode in [KEY_ESCAPE, KEY_SPACE, KEY_ENTER, KEY_KP_ENTER]:
+		get_viewport().set_input_as_handled()
+		skip_paper()
+
+
+## Volta pagina: nella storia preme il pulsante principale, in partita manda «Ho letto».
+## Contro l'IA si legge da soli, quindi il giornale sparisce subito.
+func skip_paper() -> void:
+	if is_instance_valid(_paper_first):
+		_paper_first.pressed.emit()
+	elif is_instance_valid(_paper_btn) and not _paper_btn.disabled:
+		_resume_paper()
 
 
 ## «Ho letto»: si riparte quando hanno girato pagina tutti, o allo scadere del tempo.
@@ -1520,6 +1648,7 @@ func _close_paper() -> void:
 	if is_instance_valid(paper_layer):
 		paper_layer.queue_free()
 	paper_layer = null
+	_paper_first = null
 
 
 func _ink(text: String, fs: int, col: Color, f: Font = null) -> Label:
@@ -2054,7 +2183,12 @@ func _refresh_castle(cid: int) -> void:
 	rally_row.visible = mine
 	var has_flag: bool = mine and game.castle_flag(cid) != null
 	rally_btn.visible = has_flag
-	rally_lbl.text = "Le reclute vanno alla bandiera" if has_flag else "Clic destro sulla mappa: bandiera di raduno per le reclute"
+	var join := _rally_to_join(cid) if mine and not has_flag else -1
+	rally_join_btn.visible = join >= 0
+	if join >= 0:
+		rally_join_btn.text = "Al pentolone di %s" % game.castles[join].name
+		rally_join_btn.set_meta("from", join)
+	rally_lbl.text = "Reclute al pentolone" if has_flag else ("Clic destro: un pentolone nuovo" if join >= 0 else "Clic destro sulla mappa: pentolone di raduno")
 	build_box.visible = mine and castle_tab == 1
 	build_hint.visible = mine and castle_tab == 1
 	var any_def := false
@@ -2096,7 +2230,19 @@ func _refresh_castle(cid: int) -> void:
 	_def_state("mangano", "Pronto fra %d s" % ceili(mg) if mg > 0.0 else "")
 	(def_btns["oil"] as Button).disabled = ol > 0.0 or g < 25
 	_def_state("oil", ("Pronto fra %d s" % ceili(ol)) if ol > 0.0 else ("Servono 25 fiorini" if g < 25 else ""))
-	_def_state("repair", "Lavori in corso…" if c[4] else "")
+	# ripara tutto: costo e tempo prima, avanzamento durante i lavori
+	var miss: int = int(c[12]) if c.size() > 12 else 0
+	var rb := def_btns["repair"] as Button
+	if c[4]:
+		rb.disabled = true
+		_def_state("repair", "Lavori: %d%%" % int(float(c[11]) * 100.0))
+	elif miss <= 0:
+		rb.disabled = true
+		_def_state("repair", "")
+	else:
+		var cost := Sim.repair_cost(miss)
+		rb.disabled = g < cost
+		_def_state("repair", ("%d fiorini · %d s" % [cost, Sim.repair_secs(miss)]) if g >= cost else ("Servono %d fiorini" % cost), g < cost)
 	# schede delle botteghe: quante ne hai, se te le puoi permettere
 	var have: Array[int] = []
 	have.resize(Defs.BUILDING_COUNT)
@@ -2113,6 +2259,32 @@ func _refresh_castle(cid: int) -> void:
 		if build_glyphs[k].dim == ok:
 			build_glyphs[k].dim = not ok
 			build_glyphs[k].queue_redraw()
+
+
+## Il pentolone di un altro mio castello a cui unirsi: il più vicino a questo, o -1 se non ce ne sono.
+func _rally_to_join(cid: int) -> int:
+	var best := -1
+	var bd := 1e12
+	var ce: Vector3 = game.castles[cid].center
+	for c: Dictionary in game.castles:
+		if c.id == cid or game.castle_owner(c.id) != game.my_house:
+			continue
+		var f: Variant = game.castle_flag(c.id)
+		if f != null and (f as Vector3).distance_squared_to(ce) < bd:
+			bd = (f as Vector3).distance_squared_to(ce)
+			best = c.id
+	return best
+
+
+func _join_rally() -> void:
+	var cid: int = game.ctrl.selected_castle
+	var from := int(rally_join_btn.get_meta("from", -1))
+	if cid < 0 or from < 0:
+		return
+	var f: Variant = game.castle_flag(from)
+	if f != null:
+		game.send_cmd("rally", [cid, f])
+		game.fx.sfx.play_flat("bell", -12.0)
 
 
 ## Il mio limite di truppe: cresce con i castelli (vedi Sim.unit_cap).

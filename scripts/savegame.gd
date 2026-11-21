@@ -5,7 +5,7 @@ extends RefCounted
 
 ## var e non const: i test salvano altrove, senza toccare la partita del giocatore.
 static var PATH := "user://partita.sav"
-const VERSION := 3  # 3: diciotto castelli (signorie minori del 1350) e bandiere di raduno; i vecchi salvataggi non combaciano
+const VERSION := 4  # 4: quattordici castelli (Ferrara al posto di Bologna, Oristano; signorie minori del 1350) e bandiere di raduno; i vecchi salvataggi non combaciano
 
 
 static func exists() -> bool:

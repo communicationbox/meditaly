@@ -82,7 +82,7 @@ func _run() -> void:
 	sim._collapse_check(seeds)
 	check("colonna sospesa diventa frammento", sim.fragments.size() == n0 + 1)
 	check("colonna sospesa tolta dalla griglia", w.get_v(fx, fy + 2, fz) == 0)
-	# riparazione: rimette i voxel mancanti e consuma oro
+	# ripara tutto: si paga subito in base ai blocchi, ci vuole il tempo che serve, non si riclicca
 	var own: Dictionary = g.castles[1]
 	var bp: PackedInt64Array = own.blueprint
 	var rm := PackedInt64Array()
@@ -91,14 +91,30 @@ func _run() -> void:
 	g.push_edits(rm, false)
 	sim._update_integrity(own)
 	var i0: float = own.integrity
+	var holes: int = own.missing
+	check("blocchi mancanti contati (%d)" % holes, holes >= 150)
 	sim.houses[1].gold = 500.0
 	sim.cmd_repair(1, 1)
-	for k in 60:
-		sim._repair(own, 0.5)
+	var paid := 500.0 - float(sim.houses[1].gold)
+	check("si paga subito tutto (%d fiorini per %d blocchi)" % [int(paid), holes], int(paid) == Sim.repair_cost(holes) and own.repair)
+	sim.cmd_repair(1, 1)
+	check("durante i lavori non si riclicca", 500.0 - float(sim.houses[1].gold) == paid)
+	var tick := 1.0 / Defs.SIM_HZ
+	var half := int(Sim.repair_secs(holes) * Defs.SIM_HZ * 0.5)
+	for k in half:
+		sim._repair(own, tick)
+	var left_half: int = own.repair_left
+	check("a metà tempo, metà lavoro (%d su %d)" % [left_half, holes], left_half > holes * 0.3 and left_half < holes * 0.7)
+	check("l'avanzamento arriva ai client", absf(float(sim.state_array()[0][1][11]) - (1.0 - float(left_half) / holes)) < 0.02)
+	for k in Sim.repair_secs(holes) * int(Defs.SIM_HZ) + 10:
+		if own.repair:
+			sim._repair(own, tick)
 	sim._update_integrity(own)
-	check("riparazione ripristina le mura (%.3f -> %.3f)" % [i0, own.integrity], float(own.integrity) > i0)
-	check("riparazione costa fiorini", sim.houses[1].gold < 500.0)
-	# sotto attacco la riparazione rallenta a un quarto
+	check("lavori finiti: mura intere (%.3f -> %.3f)" % [i0, own.integrity], not own.repair and own.missing == 0)
+	sim.houses[1].gold = 500.0
+	sim.cmd_repair(1, 1)
+	check("mura intatte: niente lavori e niente spesa", not own.repair and float(sim.houses[1].gold) == 500.0)
+	# sotto attacco i muratori vanno a un quarto
 	var rc: Dictionary = g.castles[3]
 	var rbp: PackedInt64Array = rc.blueprint
 	var rrm := PackedInt64Array()
@@ -106,22 +122,19 @@ func _run() -> void:
 		rrm.append((rbp[k] >> Defs.EDIT_SHIFT) << Defs.EDIT_SHIFT)
 	g.push_edits(rrm, false)
 	sim.houses[3].gold = 500.0
-	var missing := func() -> int:
-		var n := 0
-		for k in 300:
-			if w.vox[rbp[k] >> Defs.EDIT_SHIFT] == 0:
-				n += 1
-		return n
-	var m0: int = missing.call()
+	sim.cmd_repair(3, 3)
 	rc.under_attack = true
-	rc.repair_i = 0
-	sim._repair(rc, 0.5)
-	var m1: int = missing.call()
+	var l0: int = rc.repair_left
+	for k in int(Defs.SIM_HZ):
+		sim._repair(rc, tick)
+	var slow: int = l0 - int(rc.repair_left)
 	rc.under_attack = false
-	sim._repair(rc, 0.5)
-	var m2: int = missing.call()
-	check("riparazione sotto attacco lenta (%d) e normale (%d)" % [m0 - m1, m1 - m2], m0 - m1 == sim.REPAIR_PER_TICK_ATTACKED and m1 - m2 == sim.REPAIR_PER_TICK)
-	# fiorini finiti: la riparazione si ferma invece di mangiarsi tutto l'incasso
+	var l1: int = rc.repair_left
+	for k in int(Defs.SIM_HZ):
+		sim._repair(rc, tick)
+	var fast: int = l1 - int(rc.repair_left)
+	check("sotto attacco più lenta (%d al secondo) che di solito (%d)" % [slow, fast], absi(slow - int(Sim.REPAIR_PER_SEC_ATTACKED)) <= 1 and absi(fast - int(Sim.REPAIR_PER_SEC)) <= 1)
+	# fiorini insufficienti: non parte e non spende niente
 	var bc: Dictionary = g.castles[1]
 	var bbp: PackedInt64Array = bc.blueprint
 	var brm := PackedInt64Array()
@@ -129,13 +142,8 @@ func _run() -> void:
 		brm.append((bbp[k] >> Defs.EDIT_SHIFT) << Defs.EDIT_SHIFT)
 	g.push_edits(brm, false)
 	sim.houses[1].gold = 6.0
-	sim.houses[1].repair_spent = 0.0
-	bc.repair = false
 	sim.cmd_repair(1, 1)
-	sim._repair(bc, 0.5)
-	check("riparazione senza fiorini si ferma da sola", bc.repair == false)
-	check("riparazione non va sotto zero (%.1f)" % sim.houses[1].gold, float(sim.houses[1].gold) >= 0.0)
-	check("spesa in riparazioni registrata (%.1f)" % sim.houses[1].repair_spent, float(sim.houses[1].repair_spent) >= 5.0)
+	check("senza fiorini a sufficienza non parte", not bc.repair and float(sim.houses[1].gold) == 6.0)
 	sim._tick_slow(0.5)
 	var hs1: Array = sim.state_array()[1][1]
 	check("lo snapshot porta la spesa in riparazioni (%.1f/s)" % hs1[6], hs1.size() >= 7 and float(hs1[6]) > 0.0)
@@ -474,6 +482,20 @@ func _run() -> void:
 	sim.cmd_rally(me, 1, fp)
 	sim.cmd_rally_clear(me, 1)
 	check("tasto P: bandiera tolta", not bool(fc.flag_on) and sim.state_array()[0][1][10] == null)
+	# due castelli: si può raggiungere il pentolone che c'è già, o metterne un altro
+	var fc2: Dictionary = g.castles[4]
+	var fc2_was: int = fc2.owner
+	fc2.owner = me
+	sim.cmd_rally(me, 1, fp)
+	sim.cmd_rally(me, 4, fp + Vector3(3, 0, 2))
+	check("accanto al pentolone di un altro castello: ci si unisce", (fc2.flag as Vector3).is_equal_approx(fc.flag))
+	sim.cmd_rally_clear(me, 1)
+	check("spento il pentolone di uno, l'altro resta", bool(fc2.flag_on) and not bool(fc.flag_on))
+	sim.cmd_rally(me, 4, fp + Vector3(40, 0, 0))
+	sim.cmd_rally(me, 1, fp)
+	check("altrove: un pentolone a parte", Vector2(fc2.flag.x - fc.flag.x, fc2.flag.z - fc.flag.z).length() > 30.0)
+	fc2.flag_on = false
+	fc2.owner = fc2_was
 	sim.cmd_rally(me, 1, fp)
 	var fc_was: int = fc.owner
 	sim._capture(fc, 2)
@@ -599,6 +621,26 @@ func _run() -> void:
 	sim._run_event(5)
 	check("scomunica: niente Fede", float(sim._faith_rates(0.5)[lead2]) == 0.0)
 	sim.houses[lead2].excom_until = 0.0
+	# terremoto: i nemici nel cerchio si spaventano per 10 secondi, i tuoi no
+	for u: Sim.U in sim.ulist.duplicate():
+		u.hp = 0.0
+	sim._cleanup_dead()
+	sim.truce_until = 0.0
+	var qp: Vector3 = (g.castles[3].center as Vector3) + Vector3(0, 0, 40)
+	qp.y = w.top_y(int(qp.x), int(qp.z))
+	var scared := sim.spawn_unit(Defs.FANTE, 3, qp + Vector3(5, 0, 0))
+	scared.hp = 99999.0
+	var calm := sim.spawn_unit(Defs.FANTE, 1, qp + Vector3(-5, 0, 0))
+	calm.hp = 99999.0
+	sim._quake_pulse(qp, 1)
+	check("terremoto: il nemico ha paura per %d s" % int(Sim.FEAR_T), is_equal_approx(scared.fear, Sim.FEAR_T))
+	check("terremoto: i tuoi non hanno paura", calm.fear <= 0.0)
+	scared.fear = 3.0
+	sim._quake_pulse(qp, 1)
+	check("la paura non si allunga a ogni scossa", is_equal_approx(scared.fear, 3.0))
+	scared.hp = 0.0
+	calm.hp = 0.0
+	sim._cleanup_dead()
 	# davanti alla forma si scappa urlando
 	for u: Sim.U in sim.ulist.duplicate():
 		u.hp = 0.0

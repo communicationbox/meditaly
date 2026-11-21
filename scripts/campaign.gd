@@ -4,7 +4,7 @@ extends RefCounted
 ## Solo dati. Ogni missione sblocca un pezzo di gioco; cosa non è sbloccato non si vede.
 ##
 ## Pagine del giornale: title (titolone), sub (sottotitolo), side (titoletti a lato), mini (miniatura).
-## Castelli (indici di Defs.CASTLES): 1 Milano, 2 Venezia, 4 Bologna, 5 Firenze, 6 Ancona = Borgo Spigolo,
+## Castelli (indici di Defs.CASTLES): 1 Milano, 2 Venezia, 4 Ferrara, 5 Firenze, 6 Ancona = Borgo Spigolo,
 ## 7 Roma, 8 Napoli, 9 Bari.
 
 const HERO := "il Conte di Borgo Spigolo"
@@ -20,15 +20,15 @@ const MISSIONS := [
 		"unlock": {"units": [Defs.FANTE]},
 		"intro": {
 			"title": "Conte senza terre dichiara guerra. Il vicino: «Chi?»",
-			"sub": "Il Conte di Borgo Spigolo, un castello, una vacca e tre fanti, punta Bologna. La suocera: «Non combinerà mai niente»",
+			"sub": "Il Conte di Borgo Spigolo, un castello, una vacca e tre fanti, punta Ferrara. La suocera: «Non combinerà mai niente»",
 			"side": [
 				"Borgo Spigolo compare per la prima volta su una mappa. A matita",
 				"La vacca del Conte nominata capo di stato maggiore",
-				"Il Podestà di Bologna: «Ora non posso, sono occupato»",
+				"Il Podestà di Ferrara: «Ora non posso, sono occupato»",
 			],
 		},
 		"win": {
-			"title": "Preso Bologna! Il Podestà sorpreso a metà della Gazzetta",
+			"title": "Presa Ferrara! Il Podestà sorpreso a metà della Gazzetta",
 			"sub": "Il Conte festeggia con tortellini e un discorso di quaranta minuti. La suocera: «Fortuna»",
 			"side": [
 				"Il Podestà chiede almeno di finire l'articolo",
@@ -44,11 +44,11 @@ const MISSIONS := [
 	{ # 2
 		"title": "La vendetta del vicino",
 		"minutes": "3",
-		"setup": {"gold": 250, "army": {Defs.FANTE: 6}, "owners": {4: 1}, "pnames": {1: "il Marchese di Bologna"}, "guards": {4: [6, 0, 0]}, "attack": {"house": 1, "units": {Defs.FANTE: 16}, "at": 8.0, "every": 60.0}},
+		"setup": {"gold": 250, "army": {Defs.FANTE: 6}, "owners": {4: 1}, "pnames": {1: "il Marchese di Ferrara"}, "guards": {4: [6, 0, 0]}, "attack": {"house": 1, "units": {Defs.FANTE: 16}, "at": 8.0, "every": 60.0}},
 		"goal": {"kind": "survive", "secs": 180},
 		"unlock": {"defense": ["repair"]},
 		"intro": {
-			"title": "Il Marchese di Bologna vuole indietro il gabinetto",
+			"title": "Il Marchese di Ferrara vuole indietro il gabinetto",
 			"sub": "Cugino del Podestà, arriva con un esercito e molta suscettibilità. Le mura di Borgo Spigolo sono di seconda mano",
 			"side": [
 				"Mura di Borgo Spigolo: «Reggono, se non piove»",
@@ -131,11 +131,11 @@ const MISSIONS := [
 	{ # 5
 		"title": "Il portone",
 		"minutes": "3",
-		"setup": {"gold": 450, "army": {Defs.FANTE: 10, Defs.ARIETE: 2}, "owners": {4: 1}, "pnames": {1: "il Podestà di Bologna"}, "guards": {4: [5, 1, 0]}},
+		"setup": {"gold": 450, "army": {Defs.FANTE: 10, Defs.ARIETE: 2}, "owners": {4: 1}, "pnames": {1: "il Podestà di Ferrara"}, "guards": {4: [5, 1, 0]}},
 		"goal": {"kind": "capture", "castles": [4]},
 		"unlock": {"units": [Defs.ARIETE]},
 		"intro": {
-			"title": "Il portone di Bologna resiste da tre secoli",
+			"title": "Il portone di Ferrara resiste da tre secoli",
 			"sub": "Il Conte ordina un ariete. Il falegname chiede: «Lo volete con la testa di montone o quella normale?»",
 			"side": [
 				"Il portone ha un suo fan club",
@@ -145,7 +145,7 @@ const MISSIONS := [
 		},
 		"win": {
 			"title": "Il portone cede dopo tre secoli. Il fan club è in lutto",
-			"sub": "Il Conte entra a Bologna per la seconda volta. Stavolta dalla porta",
+			"sub": "Il Conte entra a Ferrara per la seconda volta. Stavolta dalla porta",
 			"side": [
 				"Il fan club del portone si scioglie e fonda quello dell'ariete",
 				"Il montone ritrovato: guardava tutto dalla collina",
@@ -194,7 +194,7 @@ const MISSIONS := [
 		"unlock": {"defense": ["mangano", "oil"], "groups": true},
 		"intro": {
 			"title": "Il Conte ha due castelli e non sa dove ha lasciato il secondo",
-			"sub": "Firenze e Venezia si alleano contro di lui. Ctrl+1 per fare un gruppo, Backspace per correre da un castello all'altro",
+			"sub": "Firenze e Venezia si alleano contro di lui. Ctrl+1 per fare un gruppo, Tab per correre da un castello all'altro",
 			"side": [
 				"Il Conte si fa cucire un mantello con le tasche: «Per i castelli»",
 				"Sul mastio arriva il mangano. E una pentola d'olio bollente",
@@ -247,7 +247,7 @@ const MISSIONS := [
 	{ # 9
 		"title": "Il Parmigiano",
 		"minutes": "4-5",
-		"setup": {"gold": 650, "faith": 80, "army": {Defs.FANTE: 8, Defs.BALESTRIERE: 3}, "owners": {4: 1}, "pnames": {1: "il Podestà di Bologna"}, "guards": {4: [6, 3, 0]}},
+		"setup": {"gold": 650, "faith": 80, "army": {Defs.FANTE: 8, Defs.BALESTRIERE: 3}, "owners": {4: 1}, "pnames": {1: "il Podestà di Ferrara"}, "guards": {4: [6, 3, 0]}},
 		"goal": {"kind": "capture", "castles": [4]},
 		"unlock": {"build": [Defs.B_CASEIFICIO], "powers": [Defs.P_PARMIGIANO]},
 		"intro": {
@@ -309,7 +309,7 @@ const MISSIONS := [
 	{ # 11
 		"title": "Le casate si svegliano",
 		"minutes": "7-8",
-		"setup": {"gold": 900, "faith": 100, "army": {Defs.FANTE: 16, Defs.BALESTRIERE: 6, Defs.CAVALIERE: 4}, "owners": {4: 1, 5: 4}, "pnames": {1: "il Marchese di Bologna", 4: "il Signore di Firenze"}, "ai": [1, 4], "aggr": 0.5, "cap": 0.3, "guards": {4: [5, 2, 0], 5: [5, 2, 0]}},
+		"setup": {"gold": 900, "faith": 100, "army": {Defs.FANTE: 16, Defs.BALESTRIERE: 6, Defs.CAVALIERE: 4}, "owners": {4: 1, 5: 4}, "pnames": {1: "il Marchese di Ferrara", 4: "il Signore di Firenze"}, "ai": [1, 4], "aggr": 0.5, "cap": 0.3, "guards": {4: [5, 2, 0], 5: [5, 2, 0]}},
 		"goal": {"kind": "capture", "castles": [4, 5]},
 		"unlock": {"units": [Defs.NONNA, Defs.MENESTRELLO], "special": true, "events": true, "taunts": true},
 		"intro": {
@@ -338,7 +338,7 @@ const MISSIONS := [
 	{ # 12
 		"title": "Re d'Italia",
 		"minutes": "10",
-		"setup": {"gold": 1500, "faith": 150, "army": {Defs.FANTE: 18, Defs.BALESTRIERE: 8, Defs.CAVALIERE: 4, Defs.CATAPULTA: 2}, "owners": {4: 1, 5: 4, 7: 5}, "pnames": {1: "il Marchese di Bologna", 4: "il Signore di Firenze", 5: "il Re di Roma"}, "ai": [1, 4, 5], "aggr": 0.6, "cap": 0.3, "guards": {4: [5, 2, 0], 5: [5, 2, 0], 7: [5, 2, 0]}},
+		"setup": {"gold": 1500, "faith": 150, "army": {Defs.FANTE: 18, Defs.BALESTRIERE: 8, Defs.CAVALIERE: 4, Defs.CATAPULTA: 2}, "owners": {4: 1, 5: 4, 7: 5}, "pnames": {1: "il Marchese di Ferrara", 4: "il Signore di Firenze", 5: "il Re di Roma"}, "ai": [1, 4, 5], "aggr": 0.6, "cap": 0.3, "guards": {4: [5, 2, 0], 5: [5, 2, 0], 7: [5, 2, 0]}},
 		"goal": {"kind": "capture", "castles": [4, 5, 7], "finale": true},
 		"unlock": {"all": true},
 		"intro": {
@@ -352,7 +352,7 @@ const MISSIONS := [
 		},
 		"win": {
 			"title": "Il Conte è re d'Italia. La suocera: «Vedremo»",
-			"sub": "Incoronato sullo scudo, banchetto sotto le stelle. Il Podestà di Bologna manda gli auguri, dal gabinetto",
+			"sub": "Incoronato sullo scudo, banchetto sotto le stelle. Il Podestà di Ferrara manda gli auguri, dal gabinetto",
 			"side": [
 				"La vacca nominata ministro di tutto",
 				"Il geometra di Firenze progetta il nuovo palazzo reale. A occhio",

@@ -62,6 +62,95 @@ func start_loaded() -> bool:
 	return true
 
 
+# ---------------------------------------------------------------- sala d'attesa
+## Chi ospita entra in mappa ma la partita è ferma: si parte quando preme «Avvia la partita»,
+## e può farlo solo quando tutti quelli collegati hanno detto «Sono pronto».
+var lobby := false
+var lobby_ready: Dictionary = {}  # server: peer -> pronto
+var lobby_list: Array = []  # tutti: [nome, casata, pronto, ospita]
+var _test_ready_sent := false
+
+
+func _lobby_changed() -> void:
+	var list: Array = []
+	for peer: int in peer_house:
+		var h: int = peer_house[peer]
+		if h < 0:
+			continue
+		list.append([String(sim.houses[h].pname), h, peer == 1 or bool(lobby_ready.get(peer, false)), peer == 1])
+	r_lobby(list)
+	if _has_peers():
+		r_lobby.rpc(list)
+	if "--test-lobby-host" in test_args:
+		print("[lobby] %s" % str(list))
+		if list.size() >= 2 and lobby_all_ready():
+			lobby_start()
+			print("[lobby] avviata")
+			await get_tree().create_timer(3.0).timeout
+			print("[lobby] RISULTATO tempo=%.1f" % sim.time)
+			get_tree().quit(0 if sim.time > 1.0 else 3)
+
+
+@rpc("authority", "reliable")
+func r_lobby(list: Array) -> void:
+	lobby = true
+	lobby_list = list
+	if hud:
+		hud.show_lobby()
+	if "--test-lobby-client" in test_args and not is_server and not _test_ready_sent:
+		_test_ready_sent = true
+		print("[test] in sala d'attesa con %d" % list.size())
+		await get_tree().create_timer(1.0).timeout
+		lobby_set_ready(true)
+
+
+## Tutti quelli collegati sono pronti (chi ospita lo è sempre).
+func lobby_all_ready() -> bool:
+	for row: Array in lobby_list:
+		if not bool(row[2]):
+			return false
+	return true
+
+
+## Chi entra: «Sono pronto» / «Non sono pronto».
+func lobby_set_ready(ready: bool) -> void:
+	if is_server:
+		return
+	c_ready.rpc_id(1, ready)
+
+
+@rpc("any_peer", "reliable")
+func c_ready(ready: bool) -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	if not is_server or not lobby or not peer_house.has(peer):
+		return
+	lobby_ready[peer] = ready
+	_lobby_changed()
+
+
+## Chi ospita avvia la partita: parte nello stesso istante per tutti.
+func lobby_start() -> void:
+	if not is_server or not lobby or not lobby_all_ready():
+		return
+	lobby = false
+	sim.lobby = false
+	r_lobby_start()
+	if _has_peers():
+		r_lobby_start.rpc()
+
+
+@rpc("authority", "reliable")
+func r_lobby_start() -> void:
+	lobby = false
+	lobby_list = []
+	if "--test-lobby-client" in test_args and not is_server:
+		print("[test] RISULTATO partita avviata")
+		get_tree().quit(0)
+	if hud:
+		hud.hide_lobby()
+		hud.banner("Si comincia!", "che vinca il migliore, o almeno il più simpatico", Vector3.ZERO)
+
+
 func start_host(port: int, pref: int, pname: String) -> void:
 	my_name = pname
 	is_server = true
@@ -78,7 +167,10 @@ func start_host(port: int, pref: int, pname: String) -> void:
 	_load_world()
 	_create_sim()
 	_assign(1, pref, pname)
+	lobby = true
+	sim.lobby = true
 	_enter_game()
+	_lobby_changed()
 
 
 func start_dedicated(port: int, args: PackedStringArray) -> void:
@@ -307,6 +399,8 @@ func _exec_cmd(peer: int, kind: String, a: Array) -> void:
 		return
 	if not sim.cmd_allowed(team, kind, a):
 		return  # storia: non ancora sbloccato
+	if lobby:
+		return  # in sala d'attesa non si comanda niente: si spenderebbero fiorini a tempo fermo
 	match kind:
 		"recruit": sim.cmd_recruit(team, a[0], a[1])
 		"order": sim.cmd_order(team, a[0], _clamp_p(a[1]), a[2])
@@ -385,16 +479,22 @@ func c_join(pname: String, pref: int) -> void:
 	var h := _assign(peer, pref, pname)
 	var raw := edit_log.to_byte_array()
 	r_welcome.rpc_id(peer, h, raw.compress(FileAccess.COMPRESSION_ZSTD), raw.size(), sim.state_array())
+	if lobby:
+		lobby_ready[peer] = false
+		_lobby_changed()
 
 
 func _on_peer_left(peer: int) -> void:
 	var h: int = peer_house.get(peer, -1)
 	peer_house.erase(peer)
+	lobby_ready.erase(peer)
 	if h >= 0:
 		sim.houses[h].ai = true
 		sim.houses[h].peer = 0
 		msg_all("%s ha lasciato: subentra l'IA" % sim.houses[h].pname, Defs.HOUSES[h].color)
 		sim.houses[h].pname = ""
+	if lobby:
+		_lobby_changed()
 
 
 @rpc("authority", "reliable")

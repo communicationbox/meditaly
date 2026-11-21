@@ -438,6 +438,19 @@ static func skips_cinematic(event: InputEvent) -> bool:
 	return not k.keycode in [KEY_SHIFT, KEY_META, KEY_CTRL, KEY_ALT, KEY_CAPSLOCK]
 
 
+## Tab passa da un tuo castello all'altro. Va preso prima dell'interfaccia: in Godot Tab sposterebbe
+## il fuoco tra i pulsanti, e il tasto non arriverebbe mai qui sotto.
+func _input(event: InputEvent) -> void:
+	var ke := event as InputEventKey
+	if ke == null or not ke.pressed or ke.echo or ke.physical_keycode != KEY_TAB:
+		return
+	if game == null or game.hud == null or (game.hud.paper_layer != null and is_instance_valid(game.hud.paper_layer)):
+		return
+	get_viewport().set_input_as_handled()
+	if game.allowed("groups"):
+		cycle_castle(-1 if ke.shift_pressed else 1)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not cine.is_empty():
 		if skips_cinematic(event):
@@ -488,7 +501,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if digit >= 0 and game.allowed("groups"):
 			_on_group(digit, ke.ctrl_pressed or ke.meta_pressed, ke.shift_pressed)
 			return
-		if ke.physical_keycode == KEY_BACKSPACE and game.allowed("groups"):
+		if ke.physical_keycode == KEY_BACKSPACE and game.allowed("groups"):  # come Tab, per chi ci è abituato
 			cycle_castle(-1 if ke.shift_pressed else 1)
 			return
 		_on_key(ke.physical_keycode)
@@ -616,7 +629,7 @@ func _group_note(t: String) -> void:
 		game.hud.notify(t, UiStyle.INK, 1.5)
 
 
-## Backspace: il prossimo castello mio (Maiusc: il precedente), selezionato e inquadrato.
+## Tab (o Backspace): il prossimo castello mio (Maiusc: il precedente), selezionato e inquadrato.
 func cycle_castle(step: int) -> void:
 	var mine: Array[int] = []
 	for c: Dictionary in game.castles:
