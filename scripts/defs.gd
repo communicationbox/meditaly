@@ -100,6 +100,8 @@ const HOUSES := [
 ## lord: la famiglia che nel 1350 tiene un castello senza casata giocabile (le signorie minori).
 ## Combatte come i Comuni liberi, ma il castello porta il suo nome e il suo colore nello stemma;
 ## lord_of è come lo si dice («degli Este»), lord_title chi siede sul gabinetto del mastio.
+## trait è il carattere della signoria (vedi Sim._tick_lords): «compra» si vende a chi paga (LORD_PRICE),
+## «voltagabbana» si arrende a chi arriva con un'armata tre volte la sua, «tributo» paga chi la lascia in pace.
 ## Le posizioni sono vicine al vero ma non esatte: fra un castello e l'altro restano almeno 125 voxel
 ## (al nord almeno 139), se no mura e borghi si pestano i piedi e la pianura diventa troppo fitta.
 ## Per questo delle signorie del Nord c'è solo Ferrara (Este), al posto di Bologna e con il suo indice:
@@ -110,16 +112,16 @@ const CASTLES := [
 	{"name": "Milano", "lon": 9.6, "lat": 45.75, "house": 1, "wall": BRICK, "gate": 0, "guard": 4},
 	{"name": "Venezia", "lon": 12.75, "lat": 45.75, "house": 2, "wall": MARBLE, "gate": 3},
 	{"name": "Genova", "lon": 8.85, "lat": 44.55, "house": 3, "wall": STONE2, "gate": 1, "guard": 9},
-	{"name": "Ferrara", "lon": 11.6, "lat": 44.62, "house": NEUTRAL, "lord": "Este", "lord_of": "degli Este", "lord_title": "il Marchese", "lord_color": Color(0.30, 0.42, 0.80), "wall": BRICK, "gate": 1},
+	{"name": "Ferrara", "lon": 11.6, "lat": 44.62, "house": NEUTRAL, "lord": "Este", "lord_of": "degli Este", "lord_title": "il Marchese", "lord_color": Color(0.30, 0.42, 0.80), "trait": "compra", "wall": BRICK, "gate": 1},
 	{"name": "Firenze", "lon": 11.3, "lat": 43.35, "house": 4, "wall": STONE, "gate": 1, "guard": 3},
-	{"name": "Ancona", "lon": 13.2, "lat": 43.45, "house": NEUTRAL, "lord": "Malatesta", "lord_of": "dei Malatesta", "lord_title": "il Signore", "lord_color": Color(0.45, 0.62, 0.30), "wall": BRICK, "gate": 3},
+	{"name": "Ancona", "lon": 13.2, "lat": 43.45, "house": NEUTRAL, "lord": "Malatesta", "lord_of": "dei Malatesta", "lord_title": "il Signore", "lord_color": Color(0.45, 0.62, 0.30), "trait": "voltagabbana", "wall": BRICK, "gate": 3},
 	{"name": "Roma", "lon": 12.75, "lat": 41.85, "house": 5, "wall": MARBLE, "gate": 1, "guard": 7},
 	{"name": "Napoli", "lon": 14.3, "lat": 41.15, "house": 6, "wall": STONE2, "gate": 1},
 	{"name": "Bari", "lon": 16.55, "lat": 41.0, "house": NEUTRAL, "wall": STONE, "gate": 3, "guard": 6},
 	{"name": "Palermo", "lon": 13.5, "lat": 37.85, "house": 7, "wall": BRICK, "gate": 0},
 	{"name": "Cagliari", "lon": 9.15, "lat": 39.5, "house": NEUTRAL, "lord": "Corona d'Aragona", "lord_of": "della Corona d'Aragona", "lord_title": "il Viceré", "lord_color": Color(0.85, 0.70, 0.15), "wall": STONE2, "gate": 1, "guard": 6},
 	{"name": "Cosenza", "lon": 16.45, "lat": 39.3, "house": 8, "wall": STONE, "gate": 1},
-	{"name": "Oristano", "lon": 8.62, "lat": 40.45, "house": NEUTRAL, "lord": "Arborea", "lord_of": "del Giudicato d'Arborea", "lord_title": "il Giudice", "lord_color": Color(0.20, 0.55, 0.45), "wall": STONE2, "gate": 2, "guard": 3},
+	{"name": "Oristano", "lon": 8.62, "lat": 40.45, "house": NEUTRAL, "lord": "Arborea", "lord_of": "del Giudicato d'Arborea", "lord_title": "il Giudice", "lord_color": Color(0.20, 0.55, 0.45), "trait": "tributo", "wall": STONE2, "gate": 2, "guard": 3},
 ]
 
 ## Il potere scemo di ogni casata (tasto F), stesso ordine di HOUSES. Niente Fede: solo l'attesa.
@@ -260,6 +262,31 @@ static func landmass(cid: int) -> int:
 			return k
 		k += 1
 	return 0
+
+
+# ---------------------------------------------------------------- modalità
+## Conquista: tutti i castelli. A tempo: chi ne ha di più allo scadere. Palio: chi tiene più a lungo il
+## castello col Drappo, che cambia posto ogni tanto (così prima o poi passa vicino a tutti).
+enum { MODE_CONQUISTA, MODE_TEMPO, MODE_PALIO }
+const MODES := [
+	{"name": "Conquista", "desc": "Vince chi prende tutti i castelli"},
+	{"name": "A tempo", "desc": "45 minuti: vince chi ha più castelli allo scadere"},
+	{"name": "Palio", "desc": "Il Drappo cambia castello ogni 4 minuti: chi lo tiene fa punti, vince il primo a 600"},
+]
+const TIME_LIMIT := 45.0 * 60.0
+const DRAPPO_EVERY := 240.0
+const DRAPPO_GOAL := 600.0
+
+
+## Quanto chiedono gli Este per il loro castello.
+const LORD_PRICE := 400
+## Il tributo del Giudice d'Arborea: fiorini, ogni quanti secondi, e per quanto resta offeso chi disturba.
+const TRIBUTE_GOLD := 40.0
+const TRIBUTE_EVERY := 120.0
+const TRIBUTE_GRUDGE := 300.0
+## I Malatesta si arrendono a un'armata grande almeno così, e almeno TURNCOAT_RATIO volte la loro.
+const TURNCOAT_MIN := 15
+const TURNCOAT_RATIO := 3
 
 
 static func unit_cap(castles: int) -> int:

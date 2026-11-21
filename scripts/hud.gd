@@ -37,6 +37,7 @@ const QUEUE_SIZE := 40.0
 var queue_pics: Array[TextureRect] = []
 var recruit_pics: Array[TextureRect] = []
 var enemy_hint: Label
+var buy_btn: Button  # Este: «Compra il castello»
 var recruit_btns: Array[Button] = []
 var recruit_cost: Array[Label] = []
 var def_btns: Dictionary = {}
@@ -105,6 +106,7 @@ var _owner_prev := {}
 var _alarm_at := {}
 const ALARM_GAP_MS := 20000
 var truce_lbl: Label
+var mode_lbl: Label  # tempo rimasto (A tempo) o Drappo e punti (Palio)
 var taunt_btns: Array[Button] = []
 var taunt_lbl: Label
 var notify_box: VBoxContainer
@@ -224,6 +226,10 @@ func _top_bar() -> void:
 	truce_lbl.tooltip_text = "Tregua: le casate non si combattono fra loro, né soldati né torri né poteri. Le IA stanno ferme, tu puoi già prendere i castelli liberi"
 	truce_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
 	h.add_child(truce_lbl)
+	mode_lbl = UiStyle.label("", 18, UiStyle.GOLD, true)
+	mode_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
+	mode_lbl.visible = false
+	h.add_child(mode_lbl)
 	faith_bar = _bar(UiStyle.GOLD, 150.0, 3.0)
 	root.add_child(p)
 
@@ -365,6 +371,12 @@ func _castle_panel() -> void:
 	enemy_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	enemy_hint.custom_minimum_size = Vector2(300, 0)
 	v.add_child(enemy_hint)
+	buy_btn = UiStyle.button("", "Gli Este vendono il castello: si paga in contanti e si entra senza combattere", func(): game.send_cmd("buy", [game.ctrl.selected_castle]), 0.0, 40.0)
+	UiStyle.style_button(buy_btn, Color(1.0, 0.76, 0.22), UiStyle.OUTLINE, Color(1.0, 0.86, 0.38))
+	for kk: String in ["font_color", "font_hover_color", "font_pressed_color"]:
+		buy_btn.add_theme_color_override(kk, PAPER_INK)
+	buy_btn.visible = false
+	v.add_child(buy_btn)
 	# schede: Truppe | Costruzioni (stesso posto, si passa dall'una all'altra)
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 0)
@@ -888,6 +900,50 @@ Con un tuo castello selezionato, clic destro sulla mappa: il pentolone della non
 
 
 ## Menu di pausa (Esc): contro l'IA ferma anche la partita.
+# ---------------------------------------------------------------- chat
+## In rete Invio apre la riga della chat in basso a sinistra; Invio manda, Esc chiude.
+var chat_edit: LineEdit
+
+
+func open_chat() -> void:
+	if not game.net_multiplayer or game.my_house < 0:
+		return
+	if chat_edit == null or not is_instance_valid(chat_edit):
+		chat_edit = LineEdit.new()
+		chat_edit.placeholder_text = "Scrivi agli altri, Invio per mandare"
+		chat_edit.max_length = 120
+		chat_edit.custom_minimum_size = Vector2(420, 38)
+		chat_edit.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+		chat_edit.offset_left = 12
+		chat_edit.offset_top = -330
+		chat_edit.add_theme_font_override("font", UiStyle.body_font())
+		chat_edit.add_theme_font_size_override("font_size", 16)
+		chat_edit.add_theme_stylebox_override("normal", UiStyle.panel_box(UiStyle.WALNUT, UiStyle.GOLD, 8))
+		chat_edit.add_theme_color_override("font_color", UiStyle.INK)
+		chat_edit.text_submitted.connect(func(t: String) -> void:
+			game.send_chat(t)
+			_close_chat())
+		chat_edit.gui_input.connect(func(e: InputEvent) -> void:
+			var k := e as InputEventKey
+			if k != null and k.pressed and k.keycode == KEY_ESCAPE:
+				_close_chat()
+				chat_edit.accept_event())
+		root.add_child(chat_edit)
+	chat_edit.visible = true
+	chat_edit.text = ""
+	chat_edit.grab_focus()
+
+
+func chat_open() -> bool:
+	return chat_edit != null and is_instance_valid(chat_edit) and chat_edit.visible
+
+
+func _close_chat() -> void:
+	if chat_open():
+		chat_edit.release_focus()
+		chat_edit.visible = false
+
+
 # ---------------------------------------------------------------- sala d'attesa
 ## Scheda in alto al centro: chi è collegato, chi è pronto, e il pulsante per partire.
 ## Non copre la mappa: intanto ci si guarda attorno.
@@ -895,6 +951,7 @@ var lobby_panel: PanelContainer
 var _lobby_rows: VBoxContainer
 var _lobby_btn: Button
 var _lobby_hint: Label
+var _lobby_houses: HBoxContainer
 
 
 func show_lobby() -> void:
@@ -922,6 +979,31 @@ func show_lobby() -> void:
 		_lobby_rows.add_child(line)
 		if h == game.my_house:
 			me_ready = ready
+	# casate: la propria dorata, quelle libere si cliccano per cambiare
+	for ch in _lobby_houses.get_children():
+		ch.queue_free()
+	var taken := {}
+	for row: Array in game.lobby_list:
+		taken[int(row[1])] = true
+	for h in Defs.HOUSE_COUNT:
+		var b := Button.new()
+		b.text = String(Defs.HOUSES[h].name).substr(0, 1)
+		b.custom_minimum_size = Vector2(34, 34)
+		b.focus_mode = Control.FOCUS_NONE
+		var mine_h: bool = h == game.my_house
+		var free: bool = not taken.has(h) and not me_ready
+		var sbb := StyleBoxFlat.new()
+		sbb.bg_color = Defs.HOUSES[h].color if (free or mine_h) else Defs.HOUSES[h].color.darkened(0.65)
+		sbb.set_corner_radius_all(6)
+		sbb.set_border_width_all(3 if mine_h else 1)
+		sbb.border_color = UiStyle.GOLD if mine_h else UiStyle.OUTLINE
+		for st_name: String in ["normal", "hover", "pressed", "disabled"]:
+			b.add_theme_stylebox_override(st_name, sbb)
+		b.add_theme_color_override("font_color", Color(0.1, 0.07, 0.05) if Defs.HOUSES[h].color.get_luminance() > 0.55 else Color(1, 0.96, 0.88))
+		b.disabled = not free
+		b.tooltip_text = "%s · %s%s" % [Defs.HOUSES[h].name, Defs.HOUSES[h].city, ("\nLa tua casata" if mine_h else ("\nClic: gioca con questa" if free else ""))]
+		b.pressed.connect(func() -> void: game.lobby_pick_house(h))
+		_lobby_houses.add_child(b)
 	var all_ready: bool = game.lobby_all_ready()
 	if game.is_server:
 		_lobby_btn.text = "Avvia la partita"
@@ -962,6 +1044,13 @@ func _build_lobby() -> void:
 	_lobby_rows = VBoxContainer.new()
 	_lobby_rows.add_theme_constant_override("separation", 4)
 	v.add_child(_lobby_rows)
+	var hr := HBoxContainer.new()
+	hr.add_theme_constant_override("separation", 6)
+	hr.add_child(UiStyle.label("Casata", 15, UiStyle.MUTED, true))
+	_lobby_houses = HBoxContainer.new()
+	_lobby_houses.add_theme_constant_override("separation", 4)
+	hr.add_child(_lobby_houses)
+	v.add_child(hr)
 	var foot := HBoxContainer.new()
 	foot.add_theme_constant_override("separation", 12)
 	_lobby_hint = UiStyle.label("", 14, UiStyle.MUTED)
@@ -1057,9 +1146,9 @@ func _build_pause() -> void:
 	resume.add_theme_font_size_override("font_size", 21)
 	v.add_child(resume)
 	var save_b := _pause_btn("Salva partita", "Salva questa partita contro l'IA (sovrascrive quella salvata prima)", _save_game)
-	save_b.disabled = game.net_multiplayer
+	save_b.disabled = game.net_multiplayer and not game.is_server
 	if game.net_multiplayer:
-		save_b.tooltip_text = "Le partite in rete non si salvano"
+		save_b.tooltip_text = "Salva la partita in rete: dal menu, «Riprendi in rete», e chi rientra con lo stesso nome ritrova la sua casata" if game.is_server else "Salva chi ospita"
 	v.add_child(save_b)
 	v.add_child(_pause_btn("Impostazioni", "Audio, schermo e difficoltà", _open_settings))
 	v.add_child(_pause_btn("Guida e comandi", "F1", func():
@@ -1574,8 +1663,13 @@ var _paper_first: Button  # storia: il pulsante che si preme di solito («Si com
 
 
 ## Giornale aperto: Esc, Spazio e Invio voltano pagina, come il pulsante.
+## Senza giornale, in rete Invio apre la chat.
 func _input(event: InputEvent) -> void:
 	if paper_layer == null or not is_instance_valid(paper_layer):
+		var ck := event as InputEventKey
+		if ck != null and ck.pressed and not ck.echo and (ck.keycode == KEY_ENTER or ck.keycode == KEY_KP_ENTER) and not chat_open() and game.net_multiplayer:
+			get_viewport().set_input_as_handled()
+			open_chat.call_deferred()
 		return
 	var k := event as InputEventKey
 	if k != null and k.pressed and not k.echo and k.keycode in [KEY_ESCAPE, KEY_SPACE, KEY_ENTER, KEY_KP_ENTER]:
@@ -1840,6 +1934,7 @@ func on_state() -> void:
 	truce_lbl.visible = truce > 0 and game.my_house >= 0
 	if truce_lbl.visible:
 		truce_lbl.text = "Tregua %d:%02d" % [truce / 60, truce % 60]
+	_refresh_mode()
 	_update_rank(counts, hs)
 	if game.state[2] >= 0 and not victory.visible:
 		victory.visible = true
@@ -2101,6 +2196,46 @@ func _building_tip(b: Array) -> String:
 	return "%s di %s%s\n%s" % [d.name, _display_name(o), state_txt, "Clic destro: i soldati la abbattono" if has_sel else "Premi T, poi clic destro per abbatterla"]
 
 
+## Modalità: in A tempo il conto alla rovescia, nel Palio dove sta il Drappo e chi è avanti.
+func _refresh_mode() -> void:
+	var md: Dictionary = game.state[5] if game.state.size() > 5 else {}
+	var m := int(md.get("mode", Defs.MODE_CONQUISTA))
+	mode_lbl.visible = m != Defs.MODE_CONQUISTA
+	if m == Defs.MODE_TEMPO:
+		var left := int(md.get("left", 0))
+		mode_lbl.text = "Fine %d:%02d" % [left / 60, left % 60]
+		mode_lbl.tooltip_text = "A tempo: allo scadere vince chi ha più castelli (a parità, l'esercito più grande)"
+	elif m == Defs.MODE_PALIO:
+		var cid := int(md.get("drappo", -1))
+		var pts: Array = md.get("pts", [])
+		if cid < 0 or pts.size() < Defs.HOUSE_COUNT:
+			mode_lbl.visible = false
+			return
+		var lead := 0
+		for t in Defs.HOUSE_COUNT:
+			if int(pts[t]) > int(pts[lead]):
+				lead = t
+		var mine: int = int(pts[game.my_house]) if game.my_house >= 0 else 0
+		var mv := int(md.get("move", 0))
+		mode_lbl.text = "Drappo %s %d:%02d · %d/%d" % [game.castles[cid].name, mv / 60, mv % 60, mine, int(Defs.DRAPPO_GOAL)]
+		var tip := "Palio: chi tiene il castello col Drappo fa un punto al secondo; vince il primo a %d.\nIl Drappo si sposta fra %d:%02d." % [int(Defs.DRAPPO_GOAL), mv / 60, mv % 60]
+		tip += "\nIn testa: %s con %d" % [_display_name(lead), int(pts[lead])]
+		mode_lbl.tooltip_text = tip
+
+
+func drappo_castle() -> int:
+	var md: Dictionary = game.state[5] if game.state.size() > 5 else {}
+	return int(md.get("drappo", -1)) if int(md.get("mode", 0)) == Defs.MODE_PALIO else -1
+
+
+## Il carattere di ogni signoria minore, come lo racconta il pannello del castello.
+const LORD_TRAITS := {
+	"compra": "Si vende: chi paga entra senza combattere",
+	"voltagabbana": "Voltagabbana: si arrende a chi arriva con un'armata tre volte la sua",
+	"tributo": "Il Giudice paga 40 fiorini ogni 2 minuti a chi lascia in pace la Sardegna",
+}
+
+
 ## «degli Este»: la signoria minore che tiene ancora il castello, o "" se è un Comune libero.
 func _lord_of(cid: int) -> String:
 	var c: Dictionary = game.castles[cid]
@@ -2147,7 +2282,7 @@ func _refresh_castle(cid: int) -> void:
 		castle_info.text = "Il tuo castello"
 		castle_info.add_theme_color_override("font_color", UiStyle.GOLD)
 	elif o == Defs.NEUTRAL and _lord_of(cid) != "":
-		castle_info.text = "Signoria %s: non attacca nessuno, ma si difende" % _lord_of(cid)
+		castle_info.text = "Signoria %s" % _lord_of(cid)
 		castle_info.add_theme_color_override("font_color", UiStyle.MUTED)
 	elif o == Defs.NEUTRAL:
 		castle_info.text = "Senza padrone: è il bersaglio più facile"
@@ -2199,8 +2334,15 @@ func _refresh_castle(cid: int) -> void:
 	for k in tab_btns.size():
 		tab_btns[k].set_pressed_no_signal(k == castle_tab)
 	enemy_hint.visible = not mine
+	var for_sale: bool = not mine and o == Defs.NEUTRAL and _lord_of(cid) != "" and String(game.castles[cid].get("trait", "")) == "compra"
+	buy_btn.visible = for_sale and game.my_house >= 0
+	if for_sale:
+		buy_btn.text = "Compra %s · %d fiorini" % [game.castles[cid].name, Defs.LORD_PRICE]
+		buy_btn.disabled = game.gold() < Defs.LORD_PRICE
 	if not mine:
 		enemy_hint.text = "Premi T per selezionare i soldati, poi fai clic destro su questo castello."
+		if o == Defs.NEUTRAL and _lord_of(cid) != "":
+			enemy_hint.text = "%s.\n%s" % [LORD_TRAITS.get(String(game.castles[cid].get("trait", "")), "Non attacca nessuno, ma si difende"), enemy_hint.text]
 		return
 	var g: int = game.gold()
 	var church: bool = game.has_shop(Defs.B_CHIESA)
@@ -2503,10 +2645,15 @@ class Minimap:
 		var half: float = game.ctrl.dist * 0.45
 		draw_rect(Rect2((f.x - half) * sx, (f.z - half) * sz, half * 2 * sx, half * 2 * sz), Color(1, 1, 1, 0.8), false, 1.0)
 		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 300.0)
+		var drc: int = game.hud.drappo_castle() if game.hud else -1
 		for c: Dictionary in game.castles:
 			var ce: Vector3 = c.center
 			var o: int = game.castle_owner(c.id)
 			var pt := Vector2(ce.x * sx, ce.z * sz)
+			if c.id == drc:
+				# il Drappo: anello d'oro e rosso che pulsa
+				draw_arc(pt, 11.0 + pulse * 5.0, 0.0, TAU, 24, Color(0.95, 0.2, 0.15), 3.0, true)
+				draw_arc(pt, 7.0 + pulse * 3.0, 0.0, TAU, 20, Color(1.0, 0.82, 0.25), 2.0, true)
 			if o == game.my_house:
 				# il proprio castello è l'unico a rombo, con alone dorato (rosso e largo se lo attaccano)
 				if not game.state.is_empty() and game.state[0][c.id][7]:

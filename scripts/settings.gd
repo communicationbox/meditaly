@@ -12,9 +12,12 @@ const DIFFS := [
 
 static var volume := 0.8
 static var muted := false
+static var music := true
 static var fullscreen := false
 static var difficulty := 1
 static var equal_houses := false
+## Modalità della partita libera: vedi Defs.MODES.
+static var mode := 0
 static var player_name := ""
 ## Storia: l'ultima missione vinta (0 = nessuna). Le missioni si aprono una dopo l'altra.
 static var story_done := 0
@@ -29,9 +32,11 @@ static func load_all() -> void:
 	if cf.load(PATH) == OK:
 		volume = clampf(float(cf.get_value("audio", "volume", volume)), 0.0, 1.0)
 		muted = bool(cf.get_value("audio", "muto", muted))
+		music = bool(cf.get_value("audio", "musica", music))
 		fullscreen = bool(cf.get_value("schermo", "intero", fullscreen))
 		difficulty = clampi(int(cf.get_value("partita", "difficolta", difficulty)), 0, DIFFS.size() - 1)
 		equal_houses = bool(cf.get_value("partita", "casate_uguali", equal_houses))
+		mode = clampi(int(cf.get_value("partita", "modalita", mode)), 0, Defs.MODES.size() - 1)
 		player_name = String(cf.get_value("partita", "nome", player_name))
 		story_done = clampi(int(cf.get_value("storia", "vinte", story_done)), 0, Campaign.MISSIONS.size())
 	apply()
@@ -41,9 +46,11 @@ static func save_all() -> void:
 	var cf := ConfigFile.new()
 	cf.set_value("audio", "volume", volume)
 	cf.set_value("audio", "muto", muted)
+	cf.set_value("audio", "musica", music)
 	cf.set_value("schermo", "intero", fullscreen)
 	cf.set_value("partita", "difficolta", difficulty)
 	cf.set_value("partita", "casate_uguali", equal_houses)
+	cf.set_value("partita", "modalita", mode)
 	cf.set_value("partita", "nome", player_name)
 	cf.set_value("storia", "vinte", story_done)
 	cf.save(PATH)
@@ -137,6 +144,11 @@ class SettingsPanel:
 			Settings.muted = on
 			Settings.apply()
 			Settings.save_all()))
+		v.add_child(_switch_row("Musica", "Musica medievale di sottofondo", Settings.music, func(on: bool):
+			Settings.music = on
+			Settings.save_all()
+			if Music.me:
+				Music.me.refresh()))
 		# schermo
 		v.add_child(_section("SCHERMO"))
 		v.add_child(_switch_row("Schermo intero", "Occupa tutto lo schermo", Settings.fullscreen, func(on: bool):

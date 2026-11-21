@@ -9,6 +9,7 @@ signal story(mission: int, pname: String)
 var autostart_story := 0
 signal play_solo(house: int, pname: String)
 signal host(house: int, pname: String, port: int)
+signal host_saved
 signal join(ip: String, house: int, pname: String, port: int)
 signal continue_game
 
@@ -334,6 +335,31 @@ func _build_panel() -> void:
 		Settings.save_all()
 		_show_stats())
 	v.add_child(eq)
+	v.add_child(_gap(6))
+	# modalità della partita libera (anche per chi ospita)
+	var mrow := HBoxContainer.new()
+	mrow.add_theme_constant_override("separation", 6)
+	mrow.add_child(UiStyle.label("Modalità", 16, UiStyle.INK, true))
+	var mgroup := ButtonGroup.new()
+	for k in Defs.MODES.size():
+		var mb := Button.new()
+		mb.text = String(Defs.MODES[k].name)
+		mb.tooltip_text = String(Defs.MODES[k].desc)
+		mb.toggle_mode = true
+		mb.button_group = mgroup
+		mb.focus_mode = Control.FOCUS_NONE
+		mb.custom_minimum_size = Vector2(0, 32)
+		mb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		UiStyle.style_button(mb)
+		mb.add_theme_font_override("font", UiStyle.body_font())
+		mb.add_theme_font_size_override("font_size", 15)
+		mb.add_theme_color_override("font_pressed_color", UiStyle.GOLD)
+		mb.button_pressed = Settings.mode == k
+		mb.pressed.connect(func() -> void:
+			Settings.mode = k
+			Settings.save_all())
+		mrow.add_child(mb)
+	v.add_child(mrow)
 	v.add_child(_gap(10))
 	name_edit = LineEdit.new()
 	name_edit.placeholder_text = "Scrivi il tuo nome"
@@ -387,6 +413,12 @@ func _friends() -> Control:
 	var hostb := _secondary("Ospita una partita", "Gli altri entrano con il tuo indirizzo. Online serve aprire la porta UDP %d." % Defs.PORT)
 	hostb.pressed.connect(func(): _go(func(): host.emit(house, name_edit.text, Defs.PORT)))
 	box.add_child(hostb)
+	var nsv := SaveGame.summary(true)
+	if not nsv.is_empty():
+		var who := ", ".join(PackedStringArray((nsv.players as Dictionary).keys()))
+		var resb := _secondary("Riprendi la partita in rete", "%d minuti di gioco · %s · %s. Chi rientra con lo stesso nome ritrova la sua casata" % [int(nsv.minutes), who, nsv.date])
+		resb.pressed.connect(func(): _go(func(): host_saved.emit(), false))
+		box.add_child(resb)
 	var jr := HBoxContainer.new()
 	jr.add_theme_constant_override("separation", 8)
 	ip_edit = LineEdit.new()

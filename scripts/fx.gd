@@ -412,6 +412,7 @@ func add_arrows(data: PackedFloat32Array) -> void:
 
 func _process(dt: float) -> void:
 	_update_flags(dt)
+	_update_drappo()
 	_update_bubbles(dt)
 	_update_debris(dt)
 	_update_projectiles(dt)
@@ -1498,3 +1499,52 @@ func _update_flag_dots(me: int) -> void:
 		var q := a.lerp(b, (float(k) + off) / float(n))
 		q.y = float(world.top_y(int(q.x), int(q.z))) + 0.35
 		d.global_position = q
+
+
+# ---------------------------------------------------------------- Drappo del Palio
+## Sul mastio del castello col Drappo: palo dorato e drappo a scacchi rossi e oro che sventola.
+var drappo_node: Node3D
+var _drappo_cid := -1
+
+
+func _update_drappo() -> void:
+	var cid: int = game.hud.drappo_castle() if game != null and game.hud != null and not game.state.is_empty() else -1
+	if cid != _drappo_cid:
+		_drappo_cid = cid
+		if drappo_node != null and is_instance_valid(drappo_node):
+			drappo_node.queue_free()
+		drappo_node = null
+		if cid >= 0:
+			drappo_node = _make_drappo()
+			var c: Dictionary = game.castles[cid]
+			drappo_node.global_position = (c.keep as Vector3) + Vector3(0, WorldGen.KEEP_H + 1.0, 0)
+			_bounce(drappo_node)
+			sfx.play("horn", drappo_node.global_position, 0.0, 0.0)
+	if drappo_node != null and is_instance_valid(drappo_node):
+		var cloth := drappo_node.get_node_or_null("cloth") as Node3D
+		if cloth != null:
+			cloth.rotation.y = 0.25 * sin(_flag_t * 2.6)
+			cloth.rotation.x = 0.08 * sin(_flag_t * 3.7)
+
+
+func _make_drappo() -> Node3D:
+	var root := Node3D.new()
+	add_child(root)
+	var gilt := _mat(Color(1.0, 0.8, 0.25))
+	gilt.metallic = 0.6
+	gilt.roughness = 0.35
+	gilt.emission_enabled = true
+	gilt.emission = Color(1.0, 0.7, 0.2)
+	gilt.emission_energy_multiplier = 0.4
+	_pbox(root, Vector3(0.4, 11.0, 0.4), Vector3(0, 5.5, 0), gilt)
+	_pbox(root, Vector3(0.9, 0.9, 0.9), Vector3(0, 11.3, 0), gilt)
+	var cloth := Node3D.new()
+	cloth.name = "cloth"
+	cloth.position = Vector3(0.2, 10.6, 0)
+	root.add_child(cloth)
+	var red := _mat(Color(0.85, 0.12, 0.1))
+	var gold := _mat(Color(1.0, 0.82, 0.3))
+	for i in 5:
+		for j in 4:
+			_pbox(cloth, Vector3(1.0, 1.0, 0.12), Vector3(0.5 + i, -0.5 - j, 0), red if (i + j) % 2 == 0 else gold)
+	return root

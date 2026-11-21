@@ -444,7 +444,7 @@ func _input(event: InputEvent) -> void:
 	var ke := event as InputEventKey
 	if ke == null or not ke.pressed or ke.echo or ke.physical_keycode != KEY_TAB:
 		return
-	if game == null or game.hud == null or (game.hud.paper_layer != null and is_instance_valid(game.hud.paper_layer)):
+	if game == null or game.hud == null or (game.hud.paper_layer != null and is_instance_valid(game.hud.paper_layer)) or game.hud.chat_open():
 		return
 	get_viewport().set_input_as_handled()
 	if game.allowed("groups"):

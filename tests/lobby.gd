@@ -48,6 +48,33 @@ func _run() -> void:
 	g.lobby_ready[7] = true
 	g._lobby_changed()
 	check("tutti pronti: Avvia si accende", g.lobby_all_ready() and not g.hud._lobby_btn.disabled)
+	# casata: si cambia solo con una libera
+	g.lobby_pick_house(4)
+	check("la casata dell'amico non si prende", g.my_house == 1)
+	g.lobby_pick_house(7)
+	check("si passa a una casata libera (%d)" % g.my_house, g.my_house == 7 and not sim.houses[7].ai and sim.houses[1].ai)
+	g.lobby_pick_house(1)
+	# chat
+	g._chat(7, "ciao a tutti")
+	await frames(2)
+	var said := false
+	for l: Node in g.hud.find_children("*", "Label", true, false):
+		if (l as Label).text.contains("Amico: ciao a tutti"):
+			said = true
+	check("la chat arriva con il nome di chi scrive", said)
+	# salvataggio in rete: chi ospita salva, con i nomi di chi gioca
+	SaveGame.NET_PATH = "user://test_rete.sav"
+	check("chi ospita salva la partita in rete", SaveGame.save(g))
+	var sm := SaveGame.summary(true)
+	check("nel salvataggio ci sono i giocatori (%s)" % str(sm.get("players", {})), (sm.get("players", {}) as Dictionary).get("Amico", -1) == 4 and (sm.get("players", {}) as Dictionary).get("Ospite", -1) == 1)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(SaveGame.NET_PATH))
+	# chi esce e rientra con lo stesso nome ritrova la sua casata
+	g._on_peer_left(7)
+	check("uscito: la sua casata passa all'IA", sim.houses[4].ai)
+	var back := g._assign(9, 2, "Amico")
+	g.lobby_ready[9] = true
+	g._lobby_changed()
+	check("rientrato con lo stesso nome: di nuovo i Fiorentini (%d)" % back, back == 4)
 	g.lobby_start()
 	await frames(30)
 	check("avviata: niente più sala d'attesa", not g.lobby and not sim.lobby and g.hud.lobby_panel == null)

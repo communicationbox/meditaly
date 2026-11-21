@@ -28,6 +28,7 @@ func _ready() -> void:
 	th.set_font_size("font_size", "TooltipLabel", 14)
 	get_tree().root.theme = th
 	add_child.call_deferred(TipLayer.new())
+	add_child(Music.new())
 	var a := OS.get_cmdline_user_args()
 	var pref := _opt(a, "--house", "1").to_int()
 	var pname := _opt(a, "--name", "")
@@ -56,6 +57,8 @@ func _start_game() -> Game:
 	if menu:
 		menu.queue_free()
 		menu = null
+	if Music.me:
+		Music.me.game()
 	game = Game.new()
 	game.name = "Game"
 	add_child(game)
@@ -63,6 +66,8 @@ func _start_game() -> Game:
 
 
 func _show_menu() -> void:
+	if Music.me:
+		Music.me.menu()
 	menu = (load("res://scripts/menu.gd") as GDScript).new()
 	add_child(menu)
 	menu.tutorial.connect(func(house: int, pname: String): _start_game().start_solo(house, pname, PackedStringArray(["--tutorial"])))
@@ -72,6 +77,9 @@ func _show_menu() -> void:
 		_story_next = 0
 	menu.play_solo.connect(func(house: int, pname: String): _start_game().start_solo(house, pname, PackedStringArray()))
 	menu.host.connect(func(house: int, pname: String, port: int): _start_game().start_host(port, house, pname))
+	menu.host_saved.connect(func():
+		if not _start_game().start_host_loaded(Defs.PORT):
+			back_to_menu())
 	menu.join.connect(func(ip: String, house: int, pname: String, port: int): _start_game().start_client(ip, port, house, pname, PackedStringArray()))
 	menu.continue_game.connect(func():
 		if not _start_game().start_loaded():

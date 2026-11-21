@@ -131,7 +131,7 @@ const MISSIONS := [
 	{ # 5
 		"title": "Il portone",
 		"minutes": "3",
-		"setup": {"gold": 450, "army": {Defs.FANTE: 10, Defs.ARIETE: 2}, "owners": {4: 1}, "pnames": {1: "il Podestà di Ferrara"}, "guards": {4: [5, 1, 0]}},
+		"setup": {"gold": 300, "army": {Defs.FANTE: 7, Defs.ARIETE: 2}, "owners": {4: 1}, "pnames": {1: "il Podestà di Ferrara"}, "guards": {4: [14, 7, 0]}},
 		"goal": {"kind": "capture", "castles": [4]},
 		"unlock": {"units": [Defs.ARIETE]},
 		"intro": {
@@ -219,7 +219,7 @@ const MISSIONS := [
 		"title": "Serve la Fede",
 		"minutes": "4",
 		"setup": {"gold": 450, "faith": 0},
-		"goal": {"kind": "faith", "amount": 60},
+		"goal": {"kind": "faith", "amount": 140},
 		"unlock": {"build": [Defs.B_CHIESA], "units": [Defs.FRATE], "faith": true},
 		"intro": {
 			"title": "Il Conte scopre la Fede. Gliene serve parecchia",
@@ -247,7 +247,7 @@ const MISSIONS := [
 	{ # 9
 		"title": "Il Parmigiano",
 		"minutes": "4-5",
-		"setup": {"gold": 650, "faith": 80, "army": {Defs.FANTE: 8, Defs.BALESTRIERE: 3}, "owners": {4: 1}, "pnames": {1: "il Podestà di Ferrara"}, "guards": {4: [6, 3, 0]}},
+		"setup": {"gold": 450, "faith": 80, "army": {Defs.FANTE: 6, Defs.BALESTRIERE: 2}, "owners": {4: 1}, "pnames": {1: "il Podestà di Ferrara"}, "guards": {4: [12, 6, 0]}},
 		"goal": {"kind": "capture", "castles": [4]},
 		"unlock": {"build": [Defs.B_CASEIFICIO], "powers": [Defs.P_PARMIGIANO]},
 		"intro": {
@@ -276,7 +276,7 @@ const MISSIONS := [
 	{ # 10
 		"title": "Assedio vero",
 		"minutes": "8-10",
-		"setup": {"gold": 1400, "faith": 150, "army": {Defs.FANTE: 16, Defs.BALESTRIERE: 6, Defs.CAVALIERE: 3, Defs.CATAPULTA: 1}, "owners": {7: 5}, "pnames": {5: "il Re di Roma"}, "guards": {7: [7, 3, 0]}},
+		"setup": {"gold": 900, "faith": 150, "army": {Defs.FANTE: 12, Defs.BALESTRIERE: 4, Defs.CAVALIERE: 2, Defs.CATAPULTA: 2}, "owners": {7: 5}, "pnames": {5: "il Re di Roma"}, "ai": [5], "aggr": 0.3, "cap": 0.5, "guards": {7: [16, 8, 2]}},
 		"goal": {"kind": "capture", "castles": [7]},
 		"unlock": {
 			"units": [Defs.BOMBARDA],

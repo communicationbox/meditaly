@@ -621,6 +621,51 @@ func _run() -> void:
 	sim._run_event(5)
 	check("scomunica: niente Fede", float(sim._faith_rates(0.5)[lead2]) == 0.0)
 	sim.houses[lead2].excom_until = 0.0
+	# signorie minori: Este si comprano, Malatesta voltagabbana, Arborea paga il tributo
+	for u: Sim.U in sim.ulist.duplicate():
+		u.hp = 0.0
+	sim._cleanup_dead()
+	sim.truce_until = 0.0
+	var fe: Dictionary = g.castles[4]
+	fe.owner = Defs.NEUTRAL
+	sim.houses[1].gold = Defs.LORD_PRICE + 100.0
+	sim.cmd_buy(1, 9)
+	check("Bari (Comune libero) non si compra", int(g.castles[9].owner) != 1)
+	sim.cmd_buy(1, 4)
+	check("Ferrara si compra dagli Este", int(fe.owner) == 1 and is_equal_approx(float(sim.houses[1].gold), 100.0))
+	fe.owner = Defs.NEUTRAL
+	sim.houses[1].gold = 10.0
+	sim.cmd_buy(1, 4)
+	check("senza fiorini gli Este non vendono", int(fe.owner) == Defs.NEUTRAL)
+	var an: Dictionary = g.castles[6]
+	an.owner = Defs.NEUTRAL
+	for k in 3:
+		sim.spawn_unit(Defs.FANTE, Defs.NEUTRAL, an.rally)
+	for k in 8:
+		sim.spawn_unit(Defs.FANTE, 2, (an.gate_out as Vector3) + Vector3(k % 4 * 2.0, 0, k / 4 * 2.0))
+	sim._tick_lords(0.5)
+	check("Malatesta: 8 soldati non bastano", int(an.owner) == Defs.NEUTRAL)
+	for k in 10:
+		sim.spawn_unit(Defs.FANTE, 2, (an.gate_out as Vector3) + Vector3(k % 4 * 2.0, 0, 4.0 + k / 4 * 2.0))
+	sim._tick_lords(0.5)
+	check("Malatesta: con 18 cambiano bandiera", int(an.owner) == 2)
+	an.owner = Defs.NEUTRAL
+	for u: Sim.U in sim.ulist.duplicate():
+		u.hp = 0.0
+	sim._cleanup_dead()
+	var orc: Dictionary = g.castles[13]
+	orc.owner = Defs.NEUTRAL
+	sim.spawn_unit(Defs.FANTE, 3, (g.castles[11].center as Vector3) + Vector3(30, 0, 0))
+	sim.houses[1].gold = 0.0
+	sim.houses[3].gold = 0.0
+	sim.houses[1].arborea_until = 0.0
+	orc.tribute_t = Defs.TRIBUTE_EVERY
+	sim._tick_lords(0.5)
+	check("Arborea paga chi lascia in pace la Sardegna", is_equal_approx(float(sim.houses[1].gold), Defs.TRIBUTE_GOLD))
+	check("e non chi ci va con l'esercito", float(sim.houses[3].gold) == 0.0)
+	for u: Sim.U in sim.ulist.duplicate():
+		u.hp = 0.0
+	sim._cleanup_dead()
 	# terremoto: i nemici nel cerchio si spaventano per 10 secondi, i tuoi no
 	for u: Sim.U in sim.ulist.duplicate():
 		u.hp = 0.0
@@ -768,6 +813,42 @@ func _run() -> void:
 	for u: Sim.U in sim.ulist.duplicate():
 		u.hp = 0.0
 	sim._cleanup_dead()
+	# modalità A tempo: allo scadere vince chi ha più castelli
+	for cs: Dictionary in g.castles:
+		cs.owner = cs.start_house
+	g.castles[4].owner = 6
+	g.castles[9].owner = 6
+	sim.mode = Defs.MODE_TEMPO
+	sim.time = Defs.TIME_LIMIT - 1.0
+	sim._tick_mode(0.5)
+	check("A tempo: prima dello scadere nessuno vince", sim.winner < 0)
+	sim.time = Defs.TIME_LIMIT + 1.0
+	sim._tick_mode(0.5)
+	check("A tempo: vince chi ha più castelli (%d)" % sim.winner, sim.winner == 6)
+	check("lo stato porta la modalità ai client", int((sim.state_array()[5] as Dictionary).mode) == Defs.MODE_TEMPO)
+	sim.winner = -1
+	# Palio: il Drappo si posa su un castello, chi lo tiene fa punti, poi si sposta lontano
+	sim.mode = Defs.MODE_PALIO
+	sim.drappo = -1
+	sim.time = 1000.0
+	sim.truce_until = 0.0
+	sim._tick_mode(0.5)
+	var d0: int = sim.drappo
+	check("Palio: il Drappo c'è (%s)" % (g.castles[d0].name if d0 >= 0 else "-"), d0 >= 0)
+	g.castles[d0].owner = 2
+	for k in 20:
+		sim._tick_mode(0.5)
+	check("Palio: chi tiene il Drappo fa punti (%d)" % int(sim.drappo_pts[2]), int(sim.drappo_pts[2]) == 10)
+	sim.time = sim.drappo_move_t + 0.1
+	sim._tick_mode(0.5)
+	var d1: int = sim.drappo
+	check("Palio: dopo 4 minuti si sposta lontano (%s → %s)" % [g.castles[d0].name, g.castles[d1].name], d1 != d0 and (g.castles[d0].center as Vector3).distance_to(g.castles[d1].center) > 250.0)
+	g.castles[d1].owner = 2
+	sim.drappo_pts[2] = Defs.DRAPPO_GOAL - 0.2
+	sim._tick_mode(0.5)
+	check("Palio: a %d punti si vince" % int(Defs.DRAPPO_GOAL), sim.winner == 2)
+	sim.winner = -1
+	sim.mode = Defs.MODE_CONQUISTA
 	# vittoria: tutti i castelli alla stessa casata
 	for cs: Dictionary in g.castles:
 		cs.owner = 1

@@ -460,7 +460,7 @@ func _build_castle(id: int, c: Dictionary) -> Dictionary:
 		"start_house": c.house,
 		# la signoria minore che tiene il castello all'inizio (vedi Defs.CASTLES)
 		"lord": String(Defs.CASTLES[id].get("lord", "")), "lord_of": String(Defs.CASTLES[id].get("lord_of", "")),
-		"lord_title": String(Defs.CASTLES[id].get("lord_title", "")), "lord_color": Defs.CASTLES[id].get("lord_color", Defs.HOUSES[Defs.NEUTRAL].color),
+		"lord_title": String(Defs.CASTLES[id].get("lord_title", "")), "trait": String(Defs.CASTLES[id].get("trait", "")), "lord_color": Defs.CASTLES[id].get("lord_color", Defs.HOUSES[Defs.NEUTRAL].color),
 	}
 
 

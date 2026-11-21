@@ -21,9 +21,13 @@ GODOT="/Applications/Godot 2.app/Contents/MacOS/Godot"
 
 Casate (`--house`): 0 Savoia (Torino), 1 Visconti (Milano), 2 Serenissima (Venezia), 3 Superba (Repubblica di Genova), 4 Fiorentini (Repubblica di Firenze), 5 Papato (Roma), 6 Angioini (Napoli), 7 Aragonesi (Palermo), 8 Ruffo (Cosenza).
 
-L'Italia è quella del 1350, l'anno della Gazzetta. Oltre alle casate ci sono le signorie minori che contano, che non giocano ma tengono i loro castelli finché qualcuno non li prende: gli Este a Ferrara, i Malatesta ad Ancona, il Giudicato d'Arborea a Oristano e la Corona d'Aragona a Cagliari. Bari resta un Comune libero. Le posizioni sono vicine al vero ma non esatte: la pianura non deve diventare troppo fitta, quindi al nord fra due castelli restano almeno 139 voxel, e Bologna, Modena, Verona, Mantova, Padova e Rimini non ci sono.
+L'Italia è quella del 1350, l'anno della Gazzetta. Oltre alle casate ci sono le signorie minori che contano, che non giocano ma tengono i loro castelli finché qualcuno non li prende: gli Este a Ferrara, i Malatesta ad Ancona, il Giudicato d'Arborea a Oristano e la Corona d'Aragona a Cagliari. Bari resta un Comune libero. Ogni signoria ha il suo carattere: gli **Este** vendono Ferrara (400 fiorini, pulsante «Compra» nel pannello del castello: si entra senza combattere, e l'IA ogni tanto ci prova), i **Malatesta** sono voltagabbana (Ancona si arrende a chi arriva con un'armata di almeno 15 soldati e tre volte la guarnigione), il **Giudice d'Arborea** manda 40 fiorini ogni 2 minuti a chi lascia in pace la Sardegna da almeno 5 minuti. Le posizioni sono vicine al vero ma non esatte: la pianura non deve diventare troppo fitta, quindi al nord fra due castelli restano almeno 139 voxel, e Bologna, Modena, Verona, Mantova, Padova e Rimini non ci sono.
 
-**Online:** chi ospita apre la porta UDP 27015 sul router. Sulla stessa rete locale basta l'IP. Chi ospita entra in una sala d'attesa: la mappa c'è ma il tempo è fermo, e una scheda mostra chi è collegato e chi è pronto. Chi entra preme «Sono pronto»; quando lo sono tutti, chi ospita preme «Avvia la partita» e si parte insieme. Si può entrare a partita iniziata: si prende il posto dell'IA di una casata; chi esce viene rimpiazzato dall'IA.
+**Modalità** (menu, sotto «Casate uguali»): *Conquista* (tutti i castelli), *A tempo* (45 minuti: vince chi ha più castelli, a parità l'esercito più grande) e *Palio* (il Drappo sta su un castello e ogni 4 minuti si sposta lontano dagli ultimi posti dove è stato, così passa vicino a tutti: chi tiene quel castello fa un punto al secondo e vince il primo a 600). Storia e tutorial sono sempre Conquista.
+
+**Musica:** taverna tranquilla nel menu, tre brani allegri a rotazione in partita, fanfara di tuba e banchetto per chi vince. Brani CC0 in `assets/music` (crediti in `assets/music/CREDITS.md`); si spegne dalle impostazioni.
+
+**Online:** chi ospita apre la porta UDP 27015 sul router. Sulla stessa rete locale basta l'IP. Chi ospita entra in una sala d'attesa: la mappa c'è ma il tempo è fermo, e una scheda mostra chi è collegato e chi è pronto. Chi entra preme «Sono pronto»; quando lo sono tutti, chi ospita preme «Avvia la partita» e si parte insieme. In sala d'attesa si cambia casata cliccando uno stemma libero. In partita Invio apre la chat. Chi cade e rientra con lo stesso nome riprende la sua casata. Chi ospita può salvare dalla pausa: dal menu, «Riprendi la partita in rete» riapre la sala d'attesa e ognuno, rientrando con il suo nome, ritrova la sua casata. Si può entrare a partita iniziata: si prende il posto dell'IA di una casata; chi esce viene rimpiazzato dall'IA.
 
 ### Comandi
 
@@ -100,7 +104,8 @@ Il server è autoritativo: i client inviano comandi validati e ricevono snapshot
 "$GODOT" --path . -- --demo --shots CARTELLA          # assedio con screenshot e FPS
 tests/net_test.sh                                     # server + 2 client: mondi identici byte per byte
 tests/lobby_net.sh                                    # chi ospita aspetta, l'amico dice «pronto», si parte
-"$GODOT" --headless --path . -s tests/lobby.gd        # sala d'attesa: tempo fermo, Avvia solo con tutti pronti
+"$GODOT" --headless --path . -s tests/lobby.gd        # sala d'attesa: tempo fermo, Avvia solo con tutti pronti, casate, chat, rientro
+"$GODOT" --headless --path . -s tests/net_resume.gd   # partita in rete salvata e ripresa: ognuno ritrova la sua casata
 "$GODOT" --headless --path . -s tests/stuck.gd -- --seed 1   # truppe incastrate in una partita tra IA (limite 1%)
 "$GODOT" --headless --path . -s tests/pressure.gd -- --seeds 3 --min 30   # quanto è attaccato ogni castello (nessuno deve restare a zero)
 "$GODOT" --headless --path . -s tests/matchups.gd     # scontri a parità di fiorini: le picche fermano i cavalieri, l'IA risponde

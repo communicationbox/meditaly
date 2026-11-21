@@ -128,6 +128,75 @@ func c_ready(ready: bool) -> void:
 	_lobby_changed()
 
 
+## In sala d'attesa si cambia casata: solo con una libera (giocata dall'IA).
+func lobby_pick_house(h: int) -> void:
+	if is_server:
+		_pick_house(1, h)
+	else:
+		c_pick_house.rpc_id(1, h)
+
+
+@rpc("any_peer", "reliable")
+func c_pick_house(h: int) -> void:
+	if is_server:
+		_pick_house(multiplayer.get_remote_sender_id(), h)
+
+
+func _pick_house(peer: int, h: int) -> void:
+	if not lobby or not peer_house.has(peer) or h < 0 or h >= Defs.HOUSE_COUNT:
+		return
+	if not sim.houses[h].ai or not sim.houses[h].alive:
+		return
+	var old: int = peer_house[peer]
+	var pname: String = sim.houses[old].pname if old >= 0 else ""
+	if old >= 0:
+		sim.houses[old].ai = true
+		sim.houses[old].peer = 0
+		sim.houses[old].pname = ""
+	sim.houses[h].ai = false
+	sim.houses[h].peer = peer
+	sim.houses[h].pname = pname
+	peer_house[peer] = h
+	if peer == 1:
+		r_set_house(h)
+	else:
+		r_set_house.rpc_id(peer, h)
+	_lobby_changed()
+
+
+@rpc("authority", "reliable")
+func r_set_house(h: int) -> void:
+	my_house = h
+	if ctrl:
+		ctrl.focus_home()
+	if hud:
+		hud.show_lobby()
+
+
+## Chat in rete: chi scrive manda al server, che la gira a tutti con il colore della casata.
+func send_chat(text: String) -> void:
+	text = text.strip_edges().substr(0, 120)
+	if text == "":
+		return
+	if is_server:
+		_chat(1, text)
+	else:
+		c_chat.rpc_id(1, text)
+
+
+@rpc("any_peer", "reliable")
+func c_chat(text: String) -> void:
+	if is_server:
+		_chat(multiplayer.get_remote_sender_id(), text.substr(0, 120))
+
+
+func _chat(peer: int, text: String) -> void:
+	var h: int = peer_house.get(peer, -1)
+	if h < 0:
+		return
+	msg_all("%s: %s" % [sim.houses[h].pname, text], Defs.HOUSES[h].color.lerp(Color.WHITE, 0.35))
+
+
 ## Chi ospita avvia la partita: parte nello stesso istante per tutti.
 func lobby_start() -> void:
 	if not is_server or not lobby or not lobby_all_ready():
@@ -171,6 +240,44 @@ func start_host(port: int, pref: int, pname: String) -> void:
 	sim.lobby = true
 	_enter_game()
 	_lobby_changed()
+
+
+## Chi ospita riprende la partita in rete salvata: sala d'attesa, e gli amici che rientrano con il
+## loro nome ritrovano la loro casata. Le casate di chi non torna le gioca l'IA.
+func start_host_loaded(port: int) -> bool:
+	var d := SaveGame.load_data(true)
+	if d.is_empty():
+		return false
+	my_name = String(d.name)
+	is_server = true
+	net_multiplayer = true
+	var peer := ENetMultiplayerPeer.new()
+	if peer.create_server(port, 16) != OK:
+		push_error("Impossibile aprire la porta %d" % port)
+		return false
+	multiplayer.multiplayer_peer = peer
+	multiplayer.peer_disconnected.connect(_on_peer_left)
+	multiplayer.peer_connected.connect(func(id: int): _patient(peer, id))
+	_load_world()
+	var raw: PackedByteArray = d.edits
+	edit_log = raw.decompress(int(d.edits_size), FileAccess.COMPRESSION_ZSTD).to_int64_array()
+	world.apply_edits(edit_log)
+	_create_sim()
+	sim.load_state(d.sim)
+	for t in Defs.HOUSE_COUNT:
+		sim.houses[t].ai = true
+		sim.houses[t].peer = 0
+	var players: Dictionary = d.get("players", {})
+	for n: String in players:
+		if n != my_name:
+			left_names[n] = int(players[n])
+	_assign(1, int(d.house), my_name)
+	lobby = true
+	sim.lobby = true
+	state = sim.state_array()
+	_enter_game()
+	_lobby_changed()
+	return true
 
 
 func start_dedicated(port: int, args: PackedStringArray) -> void:
@@ -284,6 +391,8 @@ func _create_sim() -> void:
 	sim.ai_income = float(dd.income)
 	sim.ai_cap_mult = float(dd.cap)
 	sim.equal_houses = Settings.equal_houses
+	# le modalità valgono per la partita libera: tutorial e storia hanno i loro obiettivi
+	sim.mode = Defs.MODE_CONQUISTA if "--tutorial" in test_args or "--missione" in test_args else Settings.mode
 	state = sim.state_array()
 
 
@@ -337,6 +446,8 @@ var finale: Finale
 func play_finale() -> void:
 	if finale != null or not is_view or my_house < 0:
 		return
+	if Music.me:
+		Music.me.victory()
 	await get_tree().create_timer(0.8).timeout
 	while is_inside_tree() and ctrl and not ctrl.cine.is_empty():
 		await get_tree().process_frame
@@ -415,6 +526,7 @@ func _exec_cmd(peer: int, kind: String, a: Array) -> void:
 		"build": sim.cmd_build(team, a[0], _clamp_p(a[1]))
 		"taunt": sim.cmd_taunt(team, a[0])
 		"rally": if _valid_castle(a[0]): sim.cmd_rally(team, a[0], _clamp_p(a[1]))
+		"buy": if _valid_castle(a[0]): sim.cmd_buy(team, a[0])
 		"rally_clear": if _valid_castle(a[0]): sim.cmd_rally_clear(team, a[0])
 
 
@@ -425,7 +537,7 @@ func _args_ok(kind: String, a: Array) -> bool:
 		"recruit": want = [TYPE_INT, TYPE_INT]
 		"build": want = [TYPE_INT, TYPE_VECTOR3]
 		"order": want = [TYPE_PACKED_INT32_ARRAY, TYPE_VECTOR3, TYPE_BOOL]
-		"garrison", "repair", "taunt", "rally_clear": want = [TYPE_INT]
+		"garrison", "repair", "taunt", "rally_clear", "buy": want = [TYPE_INT]
 		"rally": want = [TYPE_INT, TYPE_VECTOR3]
 		"mangano", "oil", "power": want = [TYPE_INT, TYPE_VECTOR3]
 		"power_aim": want = [TYPE_INT, TYPE_VECTOR3, TYPE_VECTOR3]
@@ -449,8 +561,16 @@ func _clamp_p(p: Vector3) -> Vector3:
 
 
 # ---------------------------------------------------------------- ingresso giocatori
+## Chi è uscito, per nome: rientrando con lo stesso nome riprende la sua casata (se c'è ancora).
+var left_names: Dictionary = {}
+
+
 func _assign(peer: int, pref: int, pname: String) -> int:
 	var h: int = -1
+	var back: int = int(left_names.get(pname, -1)) if pname != "" else -1
+	if back >= 0 and sim.houses[back].ai and sim.houses[back].alive:
+		pref = back
+		left_names.erase(pname)
 	if pref >= 0 and pref < Defs.HOUSE_COUNT and sim.houses[pref].ai and sim.houses[pref].alive:
 		h = pref
 	else:
@@ -491,7 +611,8 @@ func _on_peer_left(peer: int) -> void:
 	if h >= 0:
 		sim.houses[h].ai = true
 		sim.houses[h].peer = 0
-		msg_all("%s ha lasciato: subentra l'IA" % sim.houses[h].pname, Defs.HOUSES[h].color)
+		msg_all("%s ha lasciato: subentra l'IA. Se rientra con lo stesso nome, riprende la sua casata" % sim.houses[h].pname, Defs.HOUSES[h].color)
+		left_names[String(sim.houses[h].pname)] = h
 		sim.houses[h].pname = ""
 	if lobby:
 		_lobby_changed()

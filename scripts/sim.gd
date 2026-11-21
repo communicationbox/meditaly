@@ -100,6 +100,12 @@ var ai_aggression := 1.0
 var ai_enabled := true
 ## Pausa (solo partite contro l'IA, dal menu di pausa).
 var paused := false
+## Modalità (Defs.MODES) e Drappo del Palio: castello, quando si sposta, punti per casata.
+var mode := Defs.MODE_CONQUISTA
+var drappo := -1
+var drappo_move_t := 0.0
+var drappo_pts: Array = []
+var _drappo_last: Array[int] = []
 ## Sala d'attesa di chi ospita: il mondo c'è, ma il tempo non scorre finché non si avvia la partita.
 var lobby := false
 ## Difficoltà: rendita dell'IA rispetto a un umano e moltiplicatore del suo esercito massimo.
@@ -211,6 +217,7 @@ func set_story_locks(n: int) -> void:
 ## Storia: prepara la partita della missione. Il mondo è appena nato: si tolgono soldati e padroni
 ## della partita libera e si mette quello che dice Campaign (vedi lì il formato di setup).
 func story_setup(hero: int, setup: Dictionary) -> void:
+	mode = Defs.MODE_CONQUISTA  # la storia ha i suoi obiettivi
 	ulist.clear()
 	by_id.clear()
 	truce_until = 0.0
@@ -586,6 +593,89 @@ func cmd_garrison(team: int, cid: int) -> void:
 		u.pos = s
 		u.garrison = true
 		u.has_order = false
+
+
+# ---------------------------------------------------------------- signorie minori
+## Ognuna ha il suo carattere (Defs.CASTLES, trait). Valgono solo finché il castello è della signoria.
+func _lord_trait(c: Dictionary) -> String:
+	if int(c.owner) != Defs.NEUTRAL or String(c.get("lord", "")) == "":
+		return ""
+	return String(c.get("trait", ""))
+
+
+func _tick_lords(dt: float) -> void:
+	for c: Dictionary in castles:
+		match _lord_trait(c):
+			"voltagabbana":
+				_turncoat_check(c)
+			"tributo":
+				_tribute(c, dt)
+
+
+## Malatesta: davanti a un'armata tre volte la loro, cambiano bandiera senza combattere.
+func _turncoat_check(c: Dictionary) -> void:
+	var ce: Vector3 = c.center
+	var per := {}
+	var guards := 0
+	for u in ulist:
+		if u.hp <= 0.0 or u.water:
+			continue
+		var d := Vector2(u.pos.x - ce.x, u.pos.z - ce.z).length()
+		if u.team == Defs.NEUTRAL:
+			if d < R + 6.0:
+				guards += 1
+		elif d < R + 28.0 and u.type != Defs.FRATE and u.feast <= 0.0:
+			per[u.team] = int(per.get(u.team, 0)) + 1
+	var best := -1
+	var bn := 0
+	for t: int in per:
+		if int(per[t]) > bn:
+			bn = per[t]
+			best = t
+	if best < 0 or bn < maxi(Defs.TURNCOAT_MIN, guards * Defs.TURNCOAT_RATIO):
+		return
+	game.msg_all("I Malatesta cambiano bandiera: %s passa a %s senza un colpo. «Siamo sempre stati con voi»" % [c.name, _hname(best)], Defs.HOUSES[best].color)
+	_capture(c, best)
+
+
+## Arborea: ogni tanto il Giudice paga chi lascia in pace la Sardegna. Chi la disturba resta senza per un po'.
+func _tribute(c: Dictionary, dt: float) -> void:
+	var island: Array[Vector3] = []
+	var land := Defs.landmass(c.id)
+	for o: Dictionary in castles:
+		if Defs.landmass(o.id) == land:
+			island.append(o.center)
+	for u in ulist:
+		if u.team != Defs.NEUTRAL and u.hp > 0.0 and u.team < Defs.HOUSE_COUNT:
+			for oc: Vector3 in island:
+				if Vector2(u.pos.x - oc.x, u.pos.z - oc.z).length() < R + 45.0:
+					houses[u.team].arborea_until = time + Defs.TRIBUTE_GRUDGE
+					break
+	c.tribute_t = float(c.get("tribute_t", 0.0)) + dt
+	if float(c.tribute_t) < Defs.TRIBUTE_EVERY:
+		return
+	c.tribute_t = 0.0
+	for t in Defs.HOUSE_COUNT:
+		if not houses[t].alive:
+			continue
+		if time >= float(houses[t].get("arborea_until", 0.0)):
+			houses[t].gold = float(houses[t].gold) + Defs.TRIBUTE_GOLD
+			game.msg_house(t, "Il Giudice d'Arborea ti manda %d fiorini: «Basta che lasciate in pace la Sardegna»" % int(Defs.TRIBUTE_GOLD), UiStyle.GOLD)
+		else:
+			game.msg_house(t, "Niente tributo dal Giudice d'Arborea: hai disturbato la Sardegna", UiStyle.MUTED)
+
+
+## Este: il castello si compra. Si paga in contanti e si entra dalla porta principale.
+func cmd_buy(team: int, cid: int) -> void:
+	var c: Dictionary = castles[cid]
+	if team < 0 or team >= Defs.HOUSE_COUNT or _lord_trait(c) != "compra":
+		return
+	if float(houses[team].gold) < Defs.LORD_PRICE:
+		game.msg_house(team, "Gli Este vogliono %d fiorini. In contanti" % Defs.LORD_PRICE, UiStyle.DANGER_TEXT)
+		return
+	houses[team].gold = float(houses[team].gold) - Defs.LORD_PRICE
+	game.msg_all("%s compra %s dagli Este. «Affare fatto: il gabinetto è compreso»" % [_hname(team), c.name], Defs.HOUSES[team].color)
+	_capture(c, team, true)
 
 
 ## «Ripara tutto il castello»: conta i blocchi mancanti, fa pagare subito tutto il conto e avvia i lavori.
@@ -2319,6 +2409,8 @@ func _tick_slow(dt: float) -> void:
 		for k in Defs.POWER_COUNT:
 			if h.cd[k] > 0.0:
 				h.cd[k] = maxf(float(h.cd[k]) - dt, 0.0)
+	_tick_lords(dt)
+	_tick_mode(dt)
 	for c: Dictionary in castles:
 		_tick_castle(c, dt)
 	_tick_buildings(dt)
@@ -2530,7 +2622,8 @@ func _closest_hostile(p: Vector3, team: int, radius: float) -> U:
 	return best
 
 
-func _capture(c: Dictionary, team: int) -> void:
+## bought: il castello è stato comprato (Este), quindi niente premio di conquista.
+func _capture(c: Dictionary, team: int, bought := false) -> void:
 	var was: int = c.owner
 	if not stats.is_empty():
 		stats.captures += 1
@@ -2541,7 +2634,8 @@ func _capture(c: Dictionary, team: int) -> void:
 	c.capture_by = -1
 	c.queue = []
 	c.flag_on = false  # la bandiera di raduno era del padrone di prima
-	houses[team].gold = float(houses[team].gold) + Defs.CAPTURE_REWARD
+	if not bought:
+		houses[team].gold = float(houses[team].gold) + Defs.CAPTURE_REWARD
 	c.repair = false
 	var edits := PackedInt64Array()
 	var bn: PackedInt32Array = c.banners
@@ -2628,6 +2722,68 @@ func _update_integrity(c: Dictionary) -> void:
 	c.missing = total - alive
 
 
+# ---------------------------------------------------------------- modalità
+func _tick_mode(dt: float) -> void:
+	if winner >= 0:
+		return
+	match mode:
+		Defs.MODE_TEMPO:
+			if time >= Defs.TIME_LIMIT:
+				_declare_winner(_leader_by_castles(), "Tempo scaduto! %s ha più castelli e si prende l'Italia")
+		Defs.MODE_PALIO:
+			if drappo_pts.size() != Defs.HOUSE_COUNT:
+				drappo_pts.resize(Defs.HOUSE_COUNT)
+				drappo_pts.fill(0.0)
+			if drappo < 0 or time >= drappo_move_t:
+				_move_drappo()
+			var o := int(castles[drappo].owner)
+			if o >= 0 and o < Defs.HOUSE_COUNT and time >= truce_until:
+				drappo_pts[o] = float(drappo_pts[o]) + dt
+				if float(drappo_pts[o]) >= Defs.DRAPPO_GOAL:
+					_declare_winner(o, "%s vince il Palio: il Drappo è suo!")
+
+
+## Il Drappo passa a un castello lontano dagli ultimi dove è stato, a caso fra i migliori tre.
+func _move_drappo() -> void:
+	var cands: Array = []
+	for c: Dictionary in castles:
+		if c.id == drappo:
+			continue
+		var far := 1e9
+		for k: int in _drappo_last:
+			far = minf(far, (c.center as Vector3).distance_to(castles[k].center))
+		cands.append([far, c.id])
+	cands.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) > float(b[0]))
+	drappo = int(cands[rng.randi() % mini(3, cands.size())][1])
+	_drappo_last.append(drappo)
+	if _drappo_last.size() > 3:
+		_drappo_last.pop_front()
+	drappo_move_t = time + Defs.DRAPPO_EVERY
+	game.banner_all("Il Drappo passa a %s!" % castles[drappo].name, "chi tiene il castello fa punti, fra 4 minuti si sposta", castles[drappo].center)
+
+
+func _leader_by_castles() -> int:
+	var best := -1
+	var bn := -1
+	var bu := -1
+	for t in Defs.HOUSE_COUNT:
+		var n := _castles_of(t)
+		var u := house_unit_count(t)
+		if n > bn or (n == bn and u > bu):
+			best = t
+			bn = n
+			bu = u
+	return best
+
+
+func _declare_winner(t: int, line: String) -> void:
+	if t < 0 or winner >= 0:
+		return
+	winner = t
+	game.msg_all(line % _hname(t), Defs.HOUSES[t].color)
+	game.fx_all("victory", castles[0].center, float(t))
+
+
 func _check_winner() -> void:
 	if winner >= 0:
 		return
@@ -2704,6 +2860,12 @@ func _ai_tick(t: int, _dt: float) -> void:
 	if own.is_empty():
 		return
 	_ai_build(t, own)
+	# un castello degli Este in vendita: chi ha i fiorini ogni tanto lo compra
+	if float(h.gold) > Defs.LORD_PRICE + 250.0 and rng.randf() < 0.02:
+		for c: Dictionary in castles:
+			if _lord_trait(c) == "compra":
+				cmd_buy(t, c.id)
+				break
 	# reclutamento
 	var c0: Dictionary = own[rng.randi() % own.size()]
 	if (c0.queue as Array).size() < 2:
@@ -2838,6 +3000,8 @@ func _ai_target(t: int, from: Vector3) -> Dictionary:
 			d *= AI_LEADER_FACTOR
 		if c.owner != Defs.NEUTRAL:
 			d *= _quiet_factor(c) * _isolation_factor(c)
+		if mode == Defs.MODE_PALIO and c.id == drappo:
+			d *= 0.35  # il Drappo fa gola a tutti, anche su un castello libero
 		if d < bd:
 			bd = d
 			best = c
@@ -2908,7 +3072,9 @@ func state_array() -> Array:
 	for b: Dictionary in buildings:
 		var prog: float = 1.0 - float(b.t) / float(Defs.BUILDINGS[b.type].time) if float(b.t) > 0.0 else 1.0
 		bs.append([int(b.id), int(b.type), int(b.owner), int(b.x), int(b.z), int(b.base), int(b.fx), int(b.fz), snappedf(prog, 0.01), bool(b.work)])
-	return [cs, hs, winner, truce, bs]
+	var left := ceili(maxf(Defs.TIME_LIMIT - time, 0.0)) if mode == Defs.MODE_TEMPO else -1
+	var md := {"mode": mode, "left": left, "drappo": drappo, "move": ceili(maxf(drappo_move_t - time, 0.0)), "pts": drappo_pts.map(func(v: Variant) -> int: return int(v))}
+	return [cs, hs, winner, truce, bs, md]
 
 
 func _send_snapshot() -> void:
@@ -3331,6 +3497,7 @@ func save_state() -> Dictionary:
 			e[k] = u.get(k)
 		us.append(e)
 	return {"time": time, "winner": winner, "truce_until": truce_until, "event_t": event_t, "procession_until": procession_until, "palio_pos": palio_pos, "palio_until": palio_until, "next_uid": next_uid, "next_bid": next_bid,
+		"mode": mode, "drappo": drappo, "drappo_move_t": drappo_move_t, "drappo_pts": drappo_pts.duplicate(), "drappo_last": Array(_drappo_last),
 		"ai_aggression": ai_aggression, "ai_income": ai_income, "ai_cap_mult": ai_cap_mult, "equal_houses": equal_houses,
 		"houses": houses.duplicate(true), "castles": cs, "units": us, "buildings": buildings.duplicate(true)}
 
@@ -3350,6 +3517,13 @@ func load_state(d: Dictionary) -> void:
 	ai_income = d.ai_income
 	ai_cap_mult = d.ai_cap_mult
 	equal_houses = bool(d.get("equal_houses", false))
+	mode = int(d.get("mode", Defs.MODE_CONQUISTA))
+	drappo = int(d.get("drappo", -1))
+	drappo_move_t = float(d.get("drappo_move_t", 0.0))
+	drappo_pts = (d.get("drappo_pts", []) as Array).duplicate()
+	_drappo_last.clear()
+	for k: Variant in d.get("drappo_last", []):
+		_drappo_last.append(int(k))
 	houses = (d.houses as Array).duplicate(true)
 	for i in castles.size():
 		var e: Dictionary = d.castles[i]
