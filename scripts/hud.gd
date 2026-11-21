@@ -1935,6 +1935,7 @@ func on_state() -> void:
 	if truce_lbl.visible:
 		truce_lbl.text = "Tregua %d:%02d" % [truce / 60, truce % 60]
 	_refresh_mode()
+	_update_music(truce > 0)
 	_update_rank(counts, hs)
 	if game.state[2] >= 0 and not victory.visible:
 		victory.visible = true
@@ -2194,6 +2195,20 @@ func _building_tip(b: Array) -> String:
 		return "%s, tua%s\n%s" % [d.name, state_txt, d.desc]
 	var has_sel: bool = not game.renderer.selected.is_empty()
 	return "%s di %s%s\n%s" % [d.name, _display_name(o), state_txt, "Clic destro: i soldati la abbattono" if has_sel else "Premi T, poi clic destro per abbatterla"]
+
+
+## La musica segue la partita: tregua tranquilla, poi festa, battaglia quando un tuo castello è
+## attaccato o quando ne stai prendendo uno.
+func _update_music(truce: bool) -> void:
+	if Music.me == null or game.my_house < 0 or game.state[2] >= 0:
+		return
+	var battle := false
+	for row: Array in game.state[0]:
+		if int(row[0]) == game.my_house and bool(row[7]):
+			battle = true
+		elif float(row[1]) > 0.0 and int(row[2]) == game.my_house:
+			battle = true
+	Music.me.update(truce, battle)
 
 
 ## Modalità: in A tempo il conto alla rovescia, nel Palio dove sta il Drappo e chi è avanti.

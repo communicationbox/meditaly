@@ -1,23 +1,41 @@
 class_name Music
 extends Node
-## Musica di sottofondo: una taverna tranquilla nel menu, tre brani allegri a rotazione in partita
-## e la fanfara di tuba per chi vince, seguita dal banchetto. Brani CC0, vedi assets/music/CREDITS.md.
-## Si spegne dalle impostazioni («Musica»); il volume segue quello generale.
+## Musica di sottofondo in stile Tre-Quattrocento. Ogni brano ha il suo momento, niente rotazione a caso:
+##   menu      → The Old Tower Inn (taverna tranquilla)
+##   calma     → Thatched Villagers (tregua e momenti tranquilli: si costruisce)
+##   partita   → Enchanted Festival (cornamusa e zufolo, festa da giullari)
+##   battaglia → Minstrel Guild (il più veloce: un tuo castello attaccato, o tu che ne prendi uno)
+##   conquista → Rejoicing, una volta, poi si torna al brano del momento
+##   vittoria  → Victory Theme, poi The Medieval Banquet per il banchetto del finale
+##   re caduto → «dun dun DUUUN» se era il tuo castello, tuba triste se era di un altro
+## Brani CC0 e CC-BY: autori in assets/music/CREDITS.md e nella schermata «Crediti» del menu.
 
 static var me: Music
 
 const MENU := "res://assets/music/menu_old_tower_inn.mp3"
-const GAME := ["res://assets/music/game_market_day.mp3", "res://assets/music/game_minstrel_dance.mp3", "res://assets/music/game_kings_feast.mp3"]
-const VICTORY := "res://assets/music/victory_tuba.ogg"
-const BANQUET := "res://assets/music/game_kings_feast.mp3"
+const MOODS := {
+	"calma": "res://assets/music/game_thatched_villagers.mp3",
+	"partita": "res://assets/music/game_enchanted_festival.mp3",
+	"battaglia": "res://assets/music/game_minstrel_guild.mp3",
+}
+const CONQUEST := "res://assets/music/game_rejoicing.mp3"
+const VICTORY := "res://assets/music/victory_medieval.mp3"
+const BANQUET := "res://assets/music/game_medieval_banquet.mp3"
+const STING_MINE := "res://assets/music/sting_der_kleber.mp3"
+const STING_THEIRS := "res://assets/music/sting_tuba_sad.ogg"
 ## La musica sta sotto ai suoni: si devono sentire i crolli e le mucche.
 const VOL_DB := -11.0
 const FADE := 1.2
+## Finito lo scontro la musica di battaglia resta ancora un po': niente salti avanti e indietro.
+const BATTLE_HOLD := 10.0
 
 var _player: AudioStreamPlayer
-var _playlist: Array = []
-var _k := 0
+var _sting: AudioStreamPlayer
 var _tw: Tween
+var _loop := ""  # il brano che torna quando finisce (quello del momento)
+var _once := false  # sta suonando un brano da una volta sola (conquista, vittoria)
+var _mood := ""
+var _battle_until := 0.0
 
 
 func _ready() -> void:
@@ -25,7 +43,10 @@ func _ready() -> void:
 	_player = AudioStreamPlayer.new()
 	_player.volume_db = VOL_DB
 	add_child(_player)
-	_player.finished.connect(_next)
+	_player.finished.connect(_finished)
+	_sting = AudioStreamPlayer.new()
+	_sting.volume_db = -4.0
+	add_child(_sting)
 
 
 func _exit_tree() -> void:
@@ -34,39 +55,80 @@ func _exit_tree() -> void:
 
 
 func menu() -> void:
-	_playlist = [MENU]
-	_k = 0
+	_mood = ""
+	_once = false
+	_loop = MENU
 	_play(MENU)
 
 
+## Si entra in partita: si comincia tranquilli.
 func game() -> void:
-	_playlist = GAME.duplicate()
-	_k = randi() % _playlist.size()
-	_play(_playlist[_k])
+	_mood = ""
+	_once = false
+	mood("calma")
 
 
-## Chi vince: tuba allegra, poi il banchetto.
+## Il momento della partita, deciso dall'interfaccia: calma (tregua), partita o battaglia.
+## battle = c'è uno scontro adesso; la battaglia resta BATTLE_HOLD secondi dopo l'ultimo.
+func update(truce: bool, battle: bool) -> void:
+	var now := Time.get_ticks_msec() / 1000.0
+	if battle:
+		_battle_until = now + BATTLE_HOLD
+	var want := "battaglia" if now < _battle_until else ("calma" if truce else "partita")
+	mood(want)
+
+
+func mood(m: String) -> void:
+	if m == _mood or not MOODS.has(m):
+		return
+	_mood = m
+	_loop = MOODS[m]
+	if not _once:
+		_play(_loop)
+
+
+## Hai preso un castello: Rejoicing una volta, poi si torna al brano del momento.
+func conquest() -> void:
+	_once = true
+	_play(CONQUEST)
+
+
+## Chi vince: il tema della vittoria, poi il banchetto.
 func victory() -> void:
-	_playlist = [BANQUET]
-	_k = 0
+	_once = true
+	_mood = "fine"
+	_loop = BANQUET
 	_play(VICTORY, false)
+
+
+## Il re è caduto: un motivetto sopra la musica, che intanto si fa da parte.
+func sting(mine: bool) -> void:
+	if not Settings.music or DisplayServer.get_name() == "headless" or _sting.playing:
+		return
+	var st := load(STING_MINE if mine else STING_THEIRS) as AudioStream
+	if st == null:
+		return
+	_sting.stream = st
+	_sting.play()
+	if _player.playing:
+		var tw := create_tween()
+		tw.tween_property(_player, "volume_db", VOL_DB - 18.0, 0.2)
+		tw.tween_interval(maxf(st.get_length() - 0.2, 0.5))
+		tw.tween_property(_player, "volume_db", VOL_DB, 1.0)
 
 
 func refresh() -> void:
 	if not Settings.music:
 		_player.stop()
-	elif not _player.playing and not _playlist.is_empty():
-		_play(_playlist[_k])
+		_sting.stop()
+	elif not _player.playing and _loop != "":
+		_play(_loop)
 
 
-func _next() -> void:
-	if _playlist.is_empty():
-		return
-	if _player.stream != null and String(_player.stream.resource_path) == VICTORY:
-		_play(_playlist[0])
-		return
-	_k = (_k + 1) % _playlist.size()
-	_play(_playlist[_k])
+func _finished() -> void:
+	_once = false
+	if _loop != "":
+		_play(_loop, false)
 
 
 func _play(path: String, fade := true) -> void:

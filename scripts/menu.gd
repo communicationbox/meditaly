@@ -273,6 +273,15 @@ func _build_panel() -> void:
 	ex.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	ex.grow_vertical = Control.GROW_DIRECTION_BOTH
 	_logo.add_child(ex)
+	var cr := _small("Crediti", "Chi ha fatto la musica e i suoni")
+	cr.pressed.connect(func() -> void:
+		var p := Credits.new()
+		add_child(p)
+		p.closed.connect(p.queue_free))
+	cr.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	cr.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	cr.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_logo.add_child(cr)
 	v.add_child(_logo)
 	v.add_child(_gap(14))
 	v.add_child(UiStyle.label("Scegli la tua casata", 18, UiStyle.GOLD, true))

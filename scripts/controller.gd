@@ -91,6 +91,8 @@ var stage: KingStage
 func king_cinematic(c: Dictionary, was: int, variant := 0) -> void:
 	if not cine.is_empty():
 		return
+	if Music.me:
+		Music.me.sting(was == game.my_house)
 	if stage == null:
 		stage = KingStage.new()
 		game.add_child(stage)
@@ -115,6 +117,8 @@ func end_cinematic() -> void:
 		# il gran finale: chi ha conquistato e chi ha perso lo vedono scritto in grande
 		var own: int = game.castle_owner(c.id)
 		if own == game.my_house:
+			if Music.me:
+				Music.me.conquest()
 			game.hud.banner("%s è tua!" % c.name, "+%d fiorini · i soldati festeggiano nel cortile" % int(Defs.CAPTURE_REWARD), c.center)
 		elif own >= 0 and own < Defs.HOUSES.size():
 			game.hud.banner("%s è caduta!" % c.name, "ora sventola la bandiera dei %s" % Defs.HOUSES[own].name, c.center)
