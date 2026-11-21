@@ -49,6 +49,10 @@ var build_btns: Array[Button] = []
 var build_menu: PanelContainer
 var shops_lbl: Label
 var build_hint: Label
+## Bandiera di raduno: riga sotto le schede, con il pulsante per toglierla.
+var rally_row: Control
+var rally_lbl: Label
+var rally_btn: Button
 var tab_bar: Control
 var tab_btns: Array[Button] = []
 var castle_tab := 0
@@ -423,6 +427,16 @@ func _castle_panel() -> void:
 	shops_lbl = UiStyle.label("Scegli una bottega, poi clicca sul terreno fuori dalle mura", 12, UiStyle.MUTED)
 	build_hint = shops_lbl
 	v.add_child(shops_lbl)
+	var rr := HBoxContainer.new()
+	rr.add_theme_constant_override("separation", 6)
+	rally_lbl = UiStyle.label("", 12, UiStyle.MUTED)
+	rally_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rally_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	rr.add_child(rally_lbl)
+	rally_btn = UiStyle.button("Togli bandiera (%s)" % Controller.RALLY_CLEAR_KEY_NAME, "La bandiera di raduno torna al castello: le reclute aspettano davanti alla porta", func(): game.ctrl.clear_flag(), 0.0, 30.0)
+	rr.add_child(rally_btn)
+	rally_row = rr
+	v.add_child(rr)
 	build_menu = PanelContainer.new()  # il vecchio riquadro a parte non c'è più: resta chiuso
 	build_menu.visible = false
 	root.add_child(build_menu)
@@ -859,7 +873,8 @@ Doppio clic o Ctrl+clic su un soldato: tutti quelli del suo tipo sullo schermo  
 Ctrl+1-0: crea un gruppo (soldati o castello)     Maiusc+1-0: aggiungi     1-0: riprendilo, due volte per andarci
 Backspace: il prossimo tuo castello (Maiusc+Backspace: il precedente)          H: nascondi l'interfaccia
 Poteri: Z Parmigiano  X Vino  C Terremoto  V Scudo  B Mucche     F: potere della casata
-Difesa, con un tuo castello selezionato: G balestrieri sulle mura, R ripara, M mangano, O olio bollente""", 15, UiStyle.INK))
+Difesa, con un tuo castello selezionato: G balestrieri sulle mura, R ripara, M mangano, O olio bollente
+Con un tuo castello selezionato, clic destro sulla mappa: bandiera di raduno, le reclute vanno lì. P (o clic destro sul castello): toglila""", 15, UiStyle.INK))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	row.add_child(UiStyle.button("Esci al menu", "Abbandona la partita", func(): game.get_parent().call_deferred("back_to_menu"), 180.0))
@@ -1680,9 +1695,10 @@ func on_state() -> void:
 			faith_rate_lbl.text = "scomunicati %ds" % excom
 		faith_lbl.tooltip_text = ("Fede +%.1f/s da chiese e frati che pregano. Serve per i poteri (tasti Z X C V B)" % fr) if fr > 0.0 else "Niente Fede: costruisci una chiesa e recluta frati che le preghino accanto"
 		castles_lbl.text = "%d/%d" % [mine, cs.size()]
-		troops_lbl.text = "%d/%d" % [units, Defs.HOUSE_UNIT_CAP]
-		troops_lbl.add_theme_color_override("font_color", UiStyle.DANGER_TEXT if units >= Defs.HOUSE_UNIT_CAP else UiStyle.INK)
-		troops_lbl.tooltip_text = "Truppe: al massimo %d. Al limite non si recluta più" % Defs.HOUSE_UNIT_CAP
+		var cap := Defs.unit_cap(mine)
+		troops_lbl.text = "%d/%d" % [units, cap]
+		troops_lbl.add_theme_color_override("font_color", UiStyle.DANGER_TEXT if units >= cap else UiStyle.INK)
+		troops_lbl.tooltip_text = "Truppe: al massimo %d (%d, più %d per ogni castello). Al limite non si recluta più" % [cap, Defs.UNIT_CAP_BASE, Defs.UNIT_CAP_PER_CASTLE]
 	else:
 		house_lbl.text = "Spettatore"
 	var my_row: Array = game.state[1][game.my_house] if game.my_house >= 0 else []
@@ -1748,7 +1764,7 @@ func _update_labels(cs: Array) -> void:
 		l.transparency = 1.0 if i == _banner_castle and is_instance_valid(_banner_box) else 0.0
 		var extra := ""
 		if cap > 0.0:
-			extra = "\n%s ferito %d%%" % ["podestà" if o == Defs.NEUTRAL else "re", int(cap * 100.0)]
+			extra = "\n%s ferito %d%%" % [Defs.castle_boss(game.castles[i], o).trim_prefix("il "), int(cap * 100.0)]
 		if is_mine and cs[i][7]:
 			l.text = "SOTTO ATTACCO!\n%s%s" % [game.castles[i].name, extra]
 			l.modulate = UiStyle.DANGER_TEXT
@@ -1956,13 +1972,19 @@ func _building_tip(b: Array) -> String:
 	return "%s di %s%s\n%s" % [d.name, _display_name(o), state_txt, "Clic destro: i soldati la abbattono" if has_sel else "Premi T, poi clic destro per abbatterla"]
 
 
+## «degli Este»: la signoria minore che tiene ancora il castello, o "" se è un Comune libero.
+func _lord_of(cid: int) -> String:
+	var c: Dictionary = game.castles[cid]
+	return String(c.get("lord_of", "")) if String(c.get("lord", "")) != "" else ""
+
+
 func _castle_tip(cid: int) -> String:
 	var o: int = game.castle_owner(cid)
 	var nm: String = game.castles[cid].name
 	var has_sel: bool = not game.renderer.selected.is_empty()
 	if o == game.my_house:
 		return "%s, il tuo castello%s" % [nm, "\nClic destro: i soldati ci vanno" if has_sel else "\nClic sinistro: crea soldati"]
-	var who: String = "senza padrone" if o == Defs.NEUTRAL else "di " + _display_name(o)
+	var who: String = ("signoria " + _lord_of(cid) if _lord_of(cid) != "" else "senza padrone") if o == Defs.NEUTRAL else "di " + _display_name(o)
 	return "%s, %s%s" % [nm, who, "\nClic destro: attacca" if has_sel else "\nPremi T, poi clic destro per attaccarlo"]
 
 
@@ -1990,11 +2012,14 @@ func _refresh_castle(cid: int) -> void:
 	var o: int = c[0]
 	var mine: bool = o == game.my_house
 	castle_title.text = game.castles[cid].name
-	castle_shield.color = Defs.HOUSES[o].color
+	castle_shield.color = game.castles[cid].lord_color if o == Defs.NEUTRAL and _lord_of(cid) != "" else Defs.HOUSES[o].color
 	castle_shield.queue_redraw()
 	if mine:
 		castle_info.text = "Il tuo castello"
 		castle_info.add_theme_color_override("font_color", UiStyle.GOLD)
+	elif o == Defs.NEUTRAL and _lord_of(cid) != "":
+		castle_info.text = "Signoria %s: non attacca nessuno, ma si difende" % _lord_of(cid)
+		castle_info.add_theme_color_override("font_color", UiStyle.MUTED)
 	elif o == Defs.NEUTRAL:
 		castle_info.text = "Senza padrone: è il bersaglio più facile"
 		castle_info.add_theme_color_override("font_color", UiStyle.MUTED)
@@ -2026,6 +2051,10 @@ func _refresh_castle(cid: int) -> void:
 		_set_tab(0)
 	tab_bar.visible = mine and any_build
 	recruit_box.visible = mine and castle_tab == 0
+	rally_row.visible = mine
+	var has_flag: bool = mine and game.castle_flag(cid) != null
+	rally_btn.visible = has_flag
+	rally_lbl.text = "Le reclute vanno alla bandiera" if has_flag else "Clic destro sulla mappa: bandiera di raduno per le reclute"
 	build_box.visible = mine and castle_tab == 1
 	build_hint.visible = mine and castle_tab == 1
 	var any_def := false
@@ -2041,7 +2070,8 @@ func _refresh_castle(cid: int) -> void:
 		return
 	var g: int = game.gold()
 	var church: bool = game.has_shop(Defs.B_CHIESA)
-	var at_cap := _my_troops_and_queue() >= Defs.HOUSE_UNIT_CAP
+	var cap := _my_cap()
+	var at_cap := _my_troops_and_queue() >= cap
 	var sale := _sale_left()
 	for t in recruit_btns.size():
 		recruit_btns[t].visible = game.allowed("unit", t)
@@ -2054,7 +2084,7 @@ func _refresh_castle(cid: int) -> void:
 			tip = "%s: %d fiorini invece di %d, saldi ancora per %d secondi\n%s\nVita %d · Velocità %d" % [d.name, cost, d.cost, sale, d.desc, d.hp, int(d.speed)]
 		recruit_cost[t].text = ("%d -50%%" % cost) if sale > 0 else str(cost)
 		if at_cap:
-			tip += "\nLimite di %d truppe raggiunto" % Defs.HOUSE_UNIT_CAP
+			tip += "\nLimite di %d truppe raggiunto: conquista castelli per alzarlo" % cap
 		elif t == Defs.FRATE and not church:
 			tip += "\nServe una chiesa: costruiscila dalla scheda Costruzioni"
 		if recruit_btns[t].tooltip_text != tip:
@@ -2083,6 +2113,16 @@ func _refresh_castle(cid: int) -> void:
 		if build_glyphs[k].dim == ok:
 			build_glyphs[k].dim = not ok
 			build_glyphs[k].queue_redraw()
+
+
+## Il mio limite di truppe: cresce con i castelli (vedi Sim.unit_cap).
+func _my_cap() -> int:
+	var n := 0
+	if not game.state.is_empty():
+		for i in game.castles.size():
+			if int((game.state[0][i] as Array)[0]) == game.my_house:
+				n += 1
+	return Defs.unit_cap(n)
 
 
 func _my_troops_and_queue() -> int:

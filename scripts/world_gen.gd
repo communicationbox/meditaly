@@ -458,6 +458,9 @@ func _build_castle(id: int, c: Dictionary) -> Dictionary:
 		"king_door": Vector3(kc.x + 0.5, b, kc.y + 0.5) + Vector3(dir.x, 0, dir.y) * (KEEP_K + 2.0),
 		"towers": towers, "slots": slots, "banners": banners, "blueprint": blueprint,
 		"start_house": c.house,
+		# la signoria minore che tiene il castello all'inizio (vedi Defs.CASTLES)
+		"lord": String(Defs.CASTLES[id].get("lord", "")), "lord_of": String(Defs.CASTLES[id].get("lord_of", "")),
+		"lord_title": String(Defs.CASTLES[id].get("lord_title", "")), "lord_color": Defs.CASTLES[id].get("lord_color", Defs.HOUSES[Defs.NEUTRAL].color),
 	}
 
 

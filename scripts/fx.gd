@@ -411,6 +411,7 @@ func add_arrows(data: PackedFloat32Array) -> void:
 
 
 func _process(dt: float) -> void:
+	_update_flags(dt)
 	_update_bubbles(dt)
 	_update_debris(dt)
 	_update_projectiles(dt)
@@ -1150,3 +1151,178 @@ func _palio(p: Vector3, life: float) -> void:
 		wave.kill()
 		if is_instance_valid(root):
 			root.queue_free())
+
+
+# ---------------------------------------------------------------- bandiere di raduno
+## Una per ogni tuo castello che ne ha una: palo, stendardo della casata che sventola, pomo dorato,
+## cartello «Raduno» e un cerchio che pulsa per terra. Con il castello selezionato, dalla porta alla
+## bandiera corre una fila di puntini.
+var flag_nodes: Dictionary = {}  # castello -> Node3D
+var _flag_dots: Array[MeshInstance3D] = []
+var _flag_t := 0.0
+const FLAG_DOTS := 28
+
+
+func _update_flags(dt: float) -> void:
+	_flag_t += dt
+	if game == null or game.state.is_empty():
+		return
+	var me: int = game.my_house
+	var keep := {}
+	for c: Dictionary in game.castles:
+		var f: Variant = game.castle_flag(c.id)
+		if f == null or me < 0 or game.castle_owner(c.id) != me:
+			continue
+		keep[c.id] = true
+		var node: Node3D = flag_nodes.get(c.id)
+		if node == null or not is_instance_valid(node):
+			node = _make_flag(Defs.HOUSES[me].color)
+			flag_nodes[c.id] = node
+			node.global_position = f
+		elif node.global_position.distance_to(f) > 0.5:
+			node.global_position = f
+			_bounce(node)
+		_wave_flag(node)
+	for id: int in flag_nodes.keys():
+		if not keep.has(id):
+			var n: Node3D = flag_nodes[id]
+			if is_instance_valid(n):
+				n.queue_free()
+			flag_nodes.erase(id)
+	_update_flag_dots(me)
+
+
+## La bandiera appena piantata, prima che il server risponda: rimbalzo e uno squillo.
+func flag_planted(p: Vector3) -> void:
+	sfx.play("horn", p, -16.0, 0.15)
+	for k in 12:
+		var a := k * TAU / 12.0
+		_spawn_debris(p + Vector3(cos(a) * 1.5, 0.4, sin(a) * 1.5), Vector3(cos(a) * 4.0, 3.0, sin(a) * 4.0), Color(0.55, 0.42, 0.25), 0.5, 18.0, 0.3)
+	var ctrl: Controller = game.ctrl
+	if ctrl != null and ctrl.selected_castle >= 0:
+		var node: Node3D = flag_nodes.get(ctrl.selected_castle)
+		if node != null and is_instance_valid(node):
+			node.global_position = p
+			_bounce(node)
+
+
+func _bounce(node: Node3D) -> void:
+	node.scale = Vector3(1.3, 0.4, 1.3)
+	var tw := node.create_tween()
+	tw.tween_property(node, "scale", Vector3.ONE, 0.45).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+
+
+func _make_flag(col: Color) -> Node3D:
+	var root := Node3D.new()
+	add_child(root)
+	var wood := _mat(Color(0.47, 0.30, 0.15))
+	var dark := _mat(Color(0.30, 0.19, 0.09))
+	_pbox(root, Vector3(1.8, 0.35, 1.8), Vector3(0, 0.15, 0), _mat(Color(0.42, 0.31, 0.18)))  # la zolla
+	_pbox(root, Vector3(0.28, 6.4, 0.28), Vector3(0, 3.2, 0), wood)
+	var gilt := _mat(Color(1.0, 0.8, 0.25))
+	gilt.metallic = 0.6
+	gilt.roughness = 0.35
+	_pbox(root, Vector3(0.55, 0.55, 0.55), Vector3(0, 6.6, 0), gilt)
+	# stendardo: quattro strisce che sventolano una dopo l'altra, con una fascia chiara al centro
+	var cloth := Node3D.new()
+	cloth.name = "cloth"
+	cloth.position = Vector3(0.14, 5.9, 0)
+	root.add_child(cloth)
+	var main := _mat(col)
+	var light := _mat(col.lerp(Color.WHITE, 0.75))
+	var piv := cloth
+	for k in 4:
+		var seg := Node3D.new()
+		seg.position = Vector3(0.0 if k == 0 else 0.8, 0, 0)
+		piv.add_child(seg)
+		var h := 1.7 - k * 0.22
+		_pbox(seg, Vector3(0.82, h, 0.08), Vector3(0.41, -h * 0.5, 0), main)
+		_pbox(seg, Vector3(0.83, 0.3, 0.1), Vector3(0.41, -h * 0.5, 0), light)
+		piv = seg
+	# cartello inchiodato al palo
+	var board := _pbox(root, Vector3(1.7, 0.75, 0.12), Vector3(0, 1.5, 0.2), wood)
+	_pbox(board, Vector3(0.12, 0.12, 0.05), Vector3(-0.7, 0.22, 0.07), dark)
+	_pbox(board, Vector3(0.12, 0.12, 0.05), Vector3(0.7, 0.22, 0.07), dark)
+	var sign := Label3D.new()
+	sign.text = "RADUNO"
+	sign.font = UiStyle.title_font()
+	sign.font_size = 40
+	sign.outline_size = 8
+	sign.modulate = Color(1.0, 0.93, 0.75)
+	sign.outline_modulate = Color(0.25, 0.12, 0.04)
+	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sign.no_depth_test = true
+	sign.pixel_size = 0.012
+	sign.position = Vector3(0, 8.0, 0)
+	root.add_child(sign)
+	# cerchio per terra che pulsa
+	var ring := MeshInstance3D.new()
+	ring.name = "ring"
+	var tm := TorusMesh.new()
+	tm.inner_radius = 2.6
+	tm.outer_radius = 3.0
+	tm.rings = 24
+	ring.mesh = tm
+	var rm := StandardMaterial3D.new()
+	rm.albedo_color = Color(col.r, col.g, col.b, 0.55)
+	rm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring.material_override = rm
+	ring.position = Vector3(0, 0.3, 0)
+	ring.scale = Vector3(1, 0.15, 1)
+	root.add_child(ring)
+	_bounce(root)
+	return root
+
+
+func _wave_flag(node: Node3D) -> void:
+	var cloth := node.get_node_or_null("cloth") as Node3D
+	var t := _flag_t * 3.2
+	var seg: Node = cloth.get_child(0) if cloth != null and cloth.get_child_count() > 0 else null
+	var k := 0
+	while seg != null:
+		(seg as Node3D).rotation.y = sin(t - k * 0.9) * (0.22 + k * 0.06)
+		k += 1
+		seg = seg.get_child(seg.get_child_count() - 1) if seg.get_child_count() > 2 else null
+	var ring := node.get_node_or_null("ring") as Node3D
+	if ring != null:
+		var s := 1.0 + 0.12 * sin(_flag_t * 2.5)
+		ring.scale = Vector3(s, 0.15, s)
+		ring.rotation.y = _flag_t * 0.4
+
+
+## Fila di puntini dalla porta alla bandiera del castello selezionato, che scorre verso la bandiera.
+func _update_flag_dots(me: int) -> void:
+	var ctrl: Controller = game.ctrl
+	var cid: int = ctrl.selected_castle if ctrl != null else -1
+	var f: Variant = game.castle_flag(cid) if cid >= 0 and me >= 0 and game.castle_owner(cid) == me else null
+	if _flag_dots.is_empty():
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.5, 0.18, 0.5)
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.albedo_color = Color(1.0, 0.95, 0.7)
+		for k in FLAG_DOTS:
+			var mi := MeshInstance3D.new()
+			mi.mesh = bm
+			mi.material_override = m
+			mi.visible = false
+			add_child(mi)
+			_flag_dots.append(mi)
+	if f == null:
+		for d in _flag_dots:
+			d.visible = false
+		return
+	var c: Dictionary = game.castles[cid]
+	var a: Vector3 = c.get("gate_out", c.center)
+	var b: Vector3 = f
+	var n := clampi(int(a.distance_to(b) / 3.0), 2, FLAG_DOTS)
+	var off := fmod(_flag_t * 0.8, 1.0)
+	for k in FLAG_DOTS:
+		var d := _flag_dots[k]
+		d.visible = k < n
+		if k >= n:
+			continue
+		var q := a.lerp(b, (float(k) + off) / float(n))
+		q.y = float(world.top_y(int(q.x), int(q.z))) + 0.35
+		d.global_position = q

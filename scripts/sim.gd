@@ -52,6 +52,8 @@ class U:
 	var flee_pos := Vector3.ZERO
 	## C'è un menestrello nemico vicino che stona: si combatte peggio.
 	var sung := false
+	## Recluta in marcia verso la bandiera di raduno del suo castello: arrivata, saluta.
+	var to_flag := false
 	## Edificio nemico che sta abbattendo (-1 = nessuno).
 	var btgt := -1
 
@@ -212,6 +214,8 @@ func story_setup(hero: int, setup: Dictionary) -> void:
 	for c: Dictionary in castles:
 		c.owner = int(owners.get(c.id, Defs.NEUTRAL))
 		c.queue = []
+		c.lord = ""  # la storia ha i suoi personaggi: niente signorie minori, solo il Podestà
+		c.flag_on = false
 	castles[Campaign.HOME_CASTLE].owner = hero
 	castles[Campaign.HOME_CASTLE].name = Campaign.HOME_NAME
 	var ai_on: Array = setup.get("ai", [])
@@ -315,6 +319,8 @@ func setup(g: Node, castle_defs: Array) -> void:
 		c.repair = false
 		c.repair_i = 0
 		c.quiet_t = 0.0
+		c.flag = Vector3.ZERO
+		c.flag_on = false
 		c.integrity = 1.0
 		c.field = PackedInt32Array()
 		c.field_dirty = true
@@ -378,16 +384,27 @@ func cmd_recruit(team: int, cid: int, type: int) -> void:
 		return
 	if (c.queue as Array).size() >= 8:
 		return
-	var cap: int = Defs.HOUSE_UNIT_CAP
-	if houses[team].ai:
-		cap = int((Defs.AI_UNIT_CAP + Defs.AI_UNIT_CAP_PER_CASTLE * _castles_of(team)) * ai_cap_mult)
-	if house_unit_count(team) + _queued(team) >= cap:
+	if unit_room(team) <= 0:
 		return
 	houses[team].gold -= price
 	if not stats.is_empty():
 		stats.recruited[type] += 1
 		stats.spent[team] += float(d.cost)
 	(c.queue as Array).append({"type": type, "t": float(d.time)})
+
+
+## Il limite di truppe di una casata: cresce con i castelli che tiene.
+func unit_cap(team: int) -> int:
+	if houses[team].ai:
+		return int((Defs.AI_UNIT_CAP + Defs.AI_UNIT_CAP_PER_CASTLE * _castles_of(team)) * ai_cap_mult)
+	return Defs.unit_cap(_castles_of(team))
+
+
+## Quanti soldati può ancora avere, contando quelli in coda nei castelli.
+func unit_room(team: int) -> int:
+	if team < 0 or team >= Defs.HOUSE_COUNT:
+		return 0
+	return unit_cap(team) - house_unit_count(team) - _queued(team)
 
 
 func _castles_of(team: int) -> int:
@@ -455,6 +472,7 @@ func cmd_order(team: int, ids: PackedInt32Array, point: Vector3, on_struct: bool
 	list.sort_custom(func(a: U, b: U): return _rank(a) < _rank(b))
 	for k in list.size():
 		var u := list[k]
+		u.to_flag = false
 		var row := k / cols
 		var col := k % cols
 		var offs := side * ((col - (cols - 1) * 0.5) * 2.0) - fwd * (row * 2.0)
@@ -477,6 +495,39 @@ func cmd_order(team: int, ids: PackedInt32Array, point: Vector3, on_struct: bool
 		else:
 			u.goal = goal if not is_siege else -1
 			u.target = p + offs
+
+
+# ---------------------------------------------------------------- bandiera di raduno
+## Clic destro con il castello selezionato: le reclute di quel castello andranno lì.
+## Un clic sul castello stesso la toglie, come cmd_rally_clear.
+func cmd_rally(team: int, cid: int, p: Vector3) -> void:
+	var c: Dictionary = castles[cid]
+	if int(c.owner) != team:
+		return
+	var on := castle_at(p, 2.0)
+	if on == cid:
+		c.flag_on = false
+		return
+	if on >= 0 and at_peace(team, int(castles[on].owner)):
+		game.msg_house(team, "Tregua: %s non si attacca ancora. Pianta la bandiera altrove" % castles[on].name, UiStyle.DANGER_TEXT)
+		return
+	p.y = float(world.top_y(int(p.x), int(p.z)))
+	c.flag = p
+	c.flag_on = true
+
+
+## La bandiera torna al castello: le reclute restano davanti alla porta.
+func cmd_rally_clear(team: int, cid: int) -> void:
+	if int(castles[cid].owner) == team:
+		castles[cid].flag_on = false
+
+
+## Manda la recluta appena uscita alla bandiera, un po' sparpagliata per non fare la fila.
+func _to_flag(u: U, c: Dictionary) -> void:
+	var ang := rng.randf() * TAU
+	var at: Vector3 = (c.flag as Vector3) + Vector3(cos(ang), 0.0, sin(ang)) * rng.randf_range(2.5, 6.0)
+	cmd_order(u.team, PackedInt32Array([u.id]), at, false)
+	u.to_flag = u.has_order
 
 
 func _rank(u: U) -> int:
@@ -929,8 +980,12 @@ func cmd_special(team: int, p: Vector3) -> bool:
 			h.discount_until = time + DISCOUNT_T
 			game.msg_house(team, "Saldi! Per %d secondi i soldati costano la metà" % int(DISCOUNT_T), UiStyle.GOLD)
 		4:
+			var room := unit_room(team)
+			if room <= 0:
+				game.msg_house(team, "Hai già il massimo di truppe: nessuno da comprare", UiStyle.MUTED)
+				return false
 			enemies.sort_custom(func(a: U, b: U) -> bool: return a.pos.distance_squared_to(p) < b.pos.distance_squared_to(p))
-			for k in mini(4, enemies.size()):
+			for k in mini(mini(4, room), enemies.size()):
 				_turn_coat(enemies[k], team)
 		5:
 			var victim := _excom_target(team, p)
@@ -948,8 +1003,12 @@ func cmd_special(team: int, p: Vector3) -> bool:
 					u.drunk = 14.0
 					u.hp = minf(u.hp + 25.0, float(Defs.UNITS[u.type].hp))
 		7:
+			var room := unit_room(team)
+			if room <= 0:
+				game.msg_house(team, "Hai già il massimo di truppe: i cugini restano a casa", UiStyle.MUTED)
+				return false
 			var at: Vector3 = (home.gate_out as Vector3) + (home.dir as Vector3) * 12.0
-			for k in 5:
+			for k in mini(5, room):
 				var q := at + Vector3(float(k) * 2.0 - 4.0, 0.0, 0.0)
 				q.y = world.top_y(int(q.x), int(q.z))
 				spawn_unit(Defs.FANTE, team, q)
@@ -1228,6 +1287,10 @@ func _tick_unit(u: U, dt: float) -> void:
 		if to.length() < 1.2 and u.goal < 0:
 			u.has_order = false
 			u.home = u.pos
+			if u.to_flag:
+				u.to_flag = false
+				if rng.randf() < 0.3:
+					_say(u, Defs.SAY_RADUNO)
 		elif u.goal >= 0 and (u.pos.distance_to(u.target) < 2.5 or _in_courtyard_of(u, castles[u.goal])):
 			u.has_order = false
 			u.home = u.pos
@@ -2214,7 +2277,9 @@ func _tick_castle(c: Dictionary, dt: float) -> void:
 			var side := Vector3(-gdir.z, 0, gdir.x)
 			var spawn: Vector3 = (c.gate_out as Vector3) + side * rng.randf_range(-3, 3) * CS + gdir * rng.randf_range(0, 3)
 			var nu := spawn_unit(type, owner_t, spawn)
-			if type == Defs.FRATE:
+			if bool(c.get("flag_on", false)) and type != Defs.FRATE:
+				_to_flag(nu, c)
+			elif type == Defs.FRATE:
 				# il frate entra subito a pregare nel cortile
 				nu.target = (c.rally as Vector3) - gdir * rng.randf_range(2.0, 5.0) + side * rng.randf_range(-3.0, 3.0) * CS
 				nu.has_order = true
@@ -2286,7 +2351,8 @@ func _tick_castle(c: Dictionary, dt: float) -> void:
 			if u.team == owner_t and u.pos.distance_to(ce) < 13.0 + R:
 				own += 1
 		var want := 6 if owner_t == Defs.NEUTRAL else 3
-		if own < want:
+		# anche la milizia conta nelle truppe: al limite non ne arriva altra
+		if own < want and (owner_t == Defs.NEUTRAL or unit_room(owner_t) > 0):
 			var m := spawn_unit(Defs.FANTE, owner_t, (c.rally as Vector3) + Vector3(rng.randf_range(-3, 3), 0, rng.randf_range(-3, 3)) * CS)
 			if owner_t == Defs.NEUTRAL:
 				m.home = m.pos
@@ -2342,7 +2408,7 @@ func _king_dies(c: Dictionary, team: int) -> void:
 ## Battuta sul re: {k} re o podestà di {t}, {c} la casata che attacca.
 func _king_line(key: String, c: Dictionary, team: int) -> String:
 	var lines: Array = Defs.KING_HIT if key == "KING_HIT" else Defs.KING_DEAD
-	var who := "il Podestà" if int(c.owner) == Defs.NEUTRAL else "il Re"
+	var who := Defs.castle_boss(c, int(c.owner))
 	return String(lines[rng.randi() % lines.size()]).format({"k": who, "K": who.capitalize(), "t": c.name, "c": _hname(team)})
 
 
@@ -2410,6 +2476,7 @@ func _capture(c: Dictionary, team: int) -> void:
 	c.capture = 0.0
 	c.capture_by = -1
 	c.queue = []
+	c.flag_on = false  # la bandiera di raduno era del padrone di prima
 	houses[team].gold = float(houses[team].gold) + Defs.CAPTURE_REWARD
 	c.repair = false
 	var edits := PackedInt64Array()
@@ -2712,13 +2779,15 @@ func _quiet_factor(c: Dictionary) -> float:
 
 
 ## Quanto la distanza del castello va ridotta perché è isolato: 1 se ha un vicino a portata.
-## Dipende solo dalla mappa, quindi è uguale su ogni client e non va salvato.
+## I castelli della stessa isola (Cagliari e Oristano) non si fanno compagnia: conta il vicino
+## più vicino fuori dall'isola. Dipende solo dalla mappa, quindi è uguale su ogni client e non va salvato.
 func _isolation_factor(c: Dictionary) -> float:
 	if _isolation.has(c.id):
 		return _isolation[c.id]
 	var nearest := 1e9
+	var land := Defs.landmass(c.id)
 	for o: Dictionary in castles:
-		if o.id != c.id:
+		if o.id != c.id and (land == 0 or Defs.landmass(o.id) != land):
 			nearest = minf(nearest, (c.center as Vector3).distance_to(o.center))
 	var f := clampf(pow(ISOLATION_REF / nearest, 1.5), ISOLATION_MIN, 1.0)
 	_isolation[c.id] = f
@@ -2750,7 +2819,7 @@ func state_array() -> Array:
 		if not q.is_empty():
 			var first: Dictionary = c.queue[0]
 			q_prog = 1.0 - float(first.t) / float(Defs.UNITS[first.type].time)
-		cs.append([c.owner, snappedf(c.capture, 0.01), c.capture_by, snappedf(c.integrity, 0.01), c.repair, snappedf(c.shot_cd, 0.1), snappedf(c.oil_cd, 0.1), c.under_attack, q, snappedf(q_prog, 0.01)])
+		cs.append([c.owner, snappedf(c.capture, 0.01), c.capture_by, snappedf(c.integrity, 0.01), c.repair, snappedf(c.shot_cd, 0.1), snappedf(c.oil_cd, 0.1), c.under_attack, q, snappedf(q_prog, 0.01), c.flag if c.get("flag_on", false) else null])
 	var hs: Array = []
 	for hi in houses.size():
 		var h: Dictionary = houses[hi]
@@ -3169,7 +3238,7 @@ func _ai_build(t: int, own: Array) -> void:
 
 # ---------------------------------------------------------------- salvataggio
 const CASTLE_SAVE := ["owner", "capture", "capture_by", "queue", "tower_cd", "shot_cd", "oil_cd", "repair", "repair_i",
-	"integrity", "militia_t", "under_attack", "king_hp", "king_calm", "king_safe", "king_by", "king_quip_t", "auto_oil_cd", "quiet_t"]
+	"integrity", "militia_t", "under_attack", "king_hp", "king_calm", "king_safe", "king_by", "king_quip_t", "auto_oil_cd", "quiet_t", "flag", "flag_on"]
 const UNIT_SAVE := ["id", "type", "team", "pos", "target", "home", "has_order", "goal", "hp", "cd", "yaw", "drunk",
 	"garrison", "sleep", "btgt", "vox_t", "vox_pos", "water", "feast", "feast_pos", "flee", "flee_pos"]
 

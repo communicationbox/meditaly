@@ -98,7 +98,7 @@ func king_cinematic(c: Dictionary, was: int, variant := 0) -> void:
 	stage.show_for(was, variant)
 	cine = {"t": 0.0, "c": c, "v": variant, "end": CINE_CLOSE + exit_time(variant), "far": cam.far}
 	if game.hud:
-		var who := "Il Podestà" if game.castle_owner(c.id) == Defs.NEUTRAL else "Il Re"
+		var who := Defs.castle_boss(c, game.castle_owner(c.id)).capitalize()
 		game.hud.letterbox(true, String(Defs.KING_DEATHS[clampi(variant, 0, Defs.KING_DEATHS.size() - 1)]) % [who, c.name])
 
 
@@ -499,6 +499,9 @@ const POWER_KEYS: Array[Key] = [KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B]
 const POWER_KEY_NAMES := ["Z", "X", "C", "V", "B"]
 const SPECIAL_KEY := KEY_F
 const SPECIAL_KEY_NAME := "F"
+## Toglie la bandiera di raduno del castello selezionato.
+const RALLY_CLEAR_KEY := KEY_P
+const RALLY_CLEAR_KEY_NAME := "P"
 
 
 func _on_key(k: Key) -> void:
@@ -537,6 +540,8 @@ func _on_key(k: Key) -> void:
 			game.hud.toggle_help()
 		KEY_H:
 			game.hud.toggle_ui()
+		RALLY_CLEAR_KEY:
+			clear_flag()
 
 
 # ---------------------------------------------------------------- gruppi e castelli, come in StarCraft
@@ -661,6 +666,8 @@ func _confirm_action() -> void:
 func _give_order() -> void:
 	var sel: Dictionary = game.renderer.selected
 	if sel.is_empty():
+		if selected_castle >= 0 and game.castle_owner(selected_castle) == game.my_house:
+			_plant_flag()
 		return
 	var hit := _ray()
 	if not hit.get("hit", false):
@@ -686,6 +693,29 @@ func _give_order() -> void:
 	for k in 10:
 		var a := k * TAU / 10.0
 		game.fx._spawn_debris(p + Vector3(cos(a) * 2.4, 0.6, sin(a) * 2.4), Vector3(-cos(a) * 3.0, 1.0, -sin(a) * 3.0), Color(1.0, 0.3, 0.2) if on_struct else Color(0.5, 1.0, 0.5), 0.5, 0.0, 0.3)
+
+
+## Clic destro con un tuo castello selezionato: pianta lì la bandiera di raduno delle sue reclute.
+## Sul castello stesso la toglie.
+func _plant_flag() -> void:
+	var hit := _ray()
+	if not hit.get("hit", false):
+		return
+	var p: Vector3 = hit.point
+	if game.castle_at(p, 2.0) == selected_castle:
+		clear_flag()
+		return
+	game.send_cmd("rally", [selected_castle, p])
+	game.fx.flag_planted(p)
+
+
+## Toglie la bandiera del castello selezionato: le reclute tornano ad aspettare alla porta.
+func clear_flag() -> void:
+	if selected_castle < 0 or game.castle_owner(selected_castle) != game.my_house:
+		return
+	if game.castle_flag(selected_castle) != null:
+		game.fx.sfx.play_flat("boing", -12.0)
+	game.send_cmd("rally_clear", [selected_castle])
 
 
 var _last_click_ms := 0

@@ -51,6 +51,8 @@ const LOAD_TIPS := [
 	"I frati pregano accanto alla chiesa. Quando non dormono.",
 	"Ctrl+1 mette i soldati scelti nel gruppo 1, il tasto 1 li riprende. Due volte e la vista corre da loro.",
 	"Backspace passa da un tuo castello all'altro.",
+	"Seleziona un castello e fai clic destro sulla mappa: le reclute si radunano alla bandiera.",
+	"Più castelli tieni, più truppe puoi avere.",
 	"Ogni potere ha la sua bottega: se te la abbattono, lo perdi.",
 	"Davanti al Parmigiano si scappa. Nella direzione sbagliata.",
 	"Chi se ne sta tranquillo attira gli invidiosi.",

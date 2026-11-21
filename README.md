@@ -18,7 +18,9 @@ GODOT="/Applications/Godot 2.app/Contents/MacOS/Godot"
 "$GODOT" --path . -- --finale --house 4          # solo il finale di chi vince, a ripetizione
 ```
 
-Casate (`--house`): 0 Savoia, 1 Visconti, 2 Serenissima, 3 Doria, 4 Medici, 5 Papato, 6 Angioini, 7 Normanni.
+Casate (`--house`): 0 Savoia (Torino), 1 Visconti (Milano), 2 Serenissima (Venezia), 3 Superba (Repubblica di Genova), 4 Fiorentini (Repubblica di Firenze), 5 Papato (Roma), 6 Angioini (Napoli), 7 Aragonesi (Palermo), 8 Ruffo (Cosenza).
+
+L'Italia è quella del 1350, l'anno della Gazzetta. Oltre alle casate ci sono le signorie minori, che non giocano ma tengono i loro castelli finché qualcuno non li prende: gli Este a Ferrara e Modena, gli Scaligeri a Verona, i Malatesta a Rimini e Ancona, i Pepoli a Bologna, il Giudicato d'Arborea a Oristano e la Corona d'Aragona a Cagliari. Bari resta un Comune libero. Le posizioni sono vicine al vero ma non esatte: fra due castelli restano almeno 125 voxel, e per questo Mantova, Padova e Urbino non ci sono.
 
 **Online:** chi ospita apre la porta UDP 27015 sul router. Sulla stessa rete locale basta l'IP. Si può entrare a partita iniziata: si prende il posto dell'IA di una casata; chi esce viene rimpiazzato dall'IA.
 
@@ -34,6 +36,8 @@ Casate (`--house`): 0 Savoia, 1 Visconti, 2 Serenissima, 3 Doria, 4 Medici, 5 Pa
 | T o F2 / Spazio | Tutta l'armata, frati esclusi / torna al castello |
 | Ctrl+1-0 / Maiusc+1-0 / 1-0 | Crea un gruppo (soldati o castello) / aggiungi / riprendilo; due volte porta la vista lì |
 | Backspace (Maiusc: indietro) | Il prossimo tuo castello, selezionato e inquadrato |
+| Clic destro con un tuo castello selezionato | Bandiera di raduno: le reclute di quel castello vanno lì. Clic destro sul castello stesso la toglie |
+| P | Togli la bandiera di raduno del castello selezionato |
 | Z X C V B | Poteri (Parmigiano, Vino, Terremoto, Scudo, Mucche), poi clic sul bersaglio |
 | F | Potere della casata |
 | G, R, M, O | Difesa del castello selezionato: balestrieri sulle mura, ripara, mangano, olio bollente |
@@ -47,6 +51,8 @@ Casate (`--house`): 0 Savoia, 1 Visconti, 2 Serenissima, 3 Doria, 4 Medici, 5 Pa
 ### Regole
 
 Recluta dal castello con i fiorini, porta l'armata al nemico ed entra nel cortile: il castello è tuo quando uccidi il re, che sta nel mastio seduto sul gabinetto. Se nessuno lo colpisce per qualche secondo si riprende. Vince chi prende tutti i castelli: chi vince si guarda il finale, con il re portato in trionfo sullo scudo e il banchetto sotto le stelle. Le truppe attraversano il mare in barca.
+
+**Limite di truppe.** Si possono avere 40 soldati più 20 per ogni castello tenuto, fino a 240; contano anche quelli in coda. Il limite vale per tutto: reclute, milizia, cugini e soldati comprati con la mazzetta. Chi perde castelli tiene i soldati che ha, ma non ne recluta altri finché non torna sotto il limite.
 
 **Assedio.** Le mura hanno un vero supporto strutturale: ciò che si stacca dal terreno cade come corpo rigido e schiaccia ciò che colpisce. La fanteria cerca la strada più breve, passa dalle brecce appena si aprono e altrimenti abbatte la porta.
 
@@ -99,8 +105,10 @@ tests/net_test.sh                                     # server + 2 client: mondi
 "$GODOT" --path . -s tests/menu_shots.gd -- CARTELLA      # il menu principale sull'Italia in voxel
 "$GODOT" --path . -s tests/finale_shots.gd -- CARTELLA    # il finale di chi vince, inquadratura per inquadratura
 "$GODOT" --path . -s tests/shops_shots.gd -- CARTELLA     # le sei botteghe, i loro personaggi e il menu
+"$GODOT" --path . -s tests/rally_shots.gd -- CARTELLA     # bandiera di raduno, reclute che ci vanno, signorie minori
 "$GODOT" --path . -s tests/fun_shots.gd -- CARTELLA       # sagra, fumetti, sciopero, sfottò
 "$GODOT" --path . -s tests/menu_panels.gd -- CARTELLA     # caricamento, menu, impostazioni, pausa
+"$GODOT" --headless --path . -s tests/castle_layout.gd  # castelli sulla terraferma, distanziati, signorie minori
 "$GODOT" --headless --path . -s tests/castle_map.gd -- Roma 313,397   # mappa percorribile di un castello, X = punti
 ```
 

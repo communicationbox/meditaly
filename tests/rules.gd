@@ -388,6 +388,97 @@ func _run() -> void:
 	mc.militia_t = 0.0
 	sim._tick_castle(mc, 0.5)
 	check("la milizia arriva quando il nemico se n'è andato (%d)" % sim.house_unit_count(mc.owner), sim.house_unit_count(mc.owner) == 1)
+	# il limite di chi gioca cresce con i castelli ed è rispettato da reclute, milizia, cugini e mazzetta
+	for u: Sim.U in sim.ulist.duplicate():
+		u.hp = 0.0
+	sim._cleanup_dead()
+	var me := 1
+	var mine_c: Dictionary = g.castles[1]
+	check("limite con un castello = %d" % Defs.unit_cap(1), sim.unit_cap(me) == Defs.unit_cap(1))
+	var lent: Dictionary = g.castles[4]
+	var lent_was: int = lent.owner
+	lent.owner = me
+	check("con due castelli il limite sale (%d)" % sim.unit_cap(me), sim.unit_cap(me) == Defs.unit_cap(1) + Defs.UNIT_CAP_PER_CASTLE)
+	lent.owner = lent_was
+	sim.houses[me].gold = 99999.0
+	var cap1 := sim.unit_cap(me)
+	for k in cap1 + 20:
+		sim.cmd_recruit(me, 1, Defs.FANTE)
+		var q: Array = mine_c.queue
+		if not q.is_empty():
+			q[0].t = 0.0
+			sim._tick_castle(mine_c, 0.1)
+	check("reclutando non si supera il limite (%d/%d)" % [sim.house_unit_count(me), cap1], sim.house_unit_count(me) + sim._queued(me) <= cap1)
+	# al limite: niente milizia anche con il cortile vuoto
+	for u: Sim.U in sim.ulist:
+		if u.team == me:
+			u.pos = (mine_c.center as Vector3) + Vector3(200, 0, 0)
+	mine_c.queue = []
+	var cap_before := sim.house_unit_count(me)
+	for k in 5:
+		mine_c.militia_t = 0.0
+		sim._tick_castle(mine_c, 0.5)
+	check("al limite non arriva milizia (%d → %d)" % [cap_before, sim.house_unit_count(me)], sim.house_unit_count(me) <= cap1)
+	# i cugini (Normanni) restano a casa quando il limite è pieno, e ne arrivano solo quanti ci stanno
+	var cug := 7
+	var cug_c: Dictionary = g.castles[10]
+	sim.houses[cug].ai = false
+	sim.truce_until = 0.0
+	for cs: Dictionary in g.castles:
+		cs.queue = []  # anche le reclute in coda contano nel limite
+	for k in sim.unit_cap(cug) - 2:
+		sim.spawn_unit(Defs.FANTE, cug, (cug_c.center as Vector3) + Vector3(300, 0, 0))
+	sim.houses[cug].sp_t = 0.0
+	sim.cmd_special(cug, cug_c.center)
+	check("cugini: ne arrivano solo 2, quanti ne stanno (%d/%d)" % [sim.house_unit_count(cug), sim.unit_cap(cug)], sim.house_unit_count(cug) == sim.unit_cap(cug))
+	sim.houses[cug].sp_t = 0.0
+	check("cugini: al limite il potere non parte", not sim.cmd_special(cug, cug_c.center))
+	sim.houses[cug].ai = true
+	# mazzetta (Medici): al limite non si compra nessuno
+	var mz := 4
+	sim.houses[mz].ai = false
+	for k in sim.unit_cap(mz):
+		sim.spawn_unit(Defs.FANTE, mz, (g.castles[5].center as Vector3) + Vector3(300, 0, 0))
+	var bribe_at: Vector3 = (g.castles[7].center as Vector3) + Vector3(60, 0, 0)
+	bribe_at.y = w.top_y(int(bribe_at.x), int(bribe_at.z))
+	for k in 4:
+		sim.spawn_unit(Defs.FANTE, 5, bribe_at + Vector3(k, 0, 0))
+	sim.houses[mz].sp_t = 0.0
+	check("mazzetta: al limite il potere non parte", not sim.cmd_special(mz, bribe_at))
+	check("mazzetta: nessuno cambia bandiera", sim.house_unit_count(mz) == sim.unit_cap(mz))
+	sim.houses[mz].ai = true
+	# bandiera di raduno: le reclute del castello ci vanno; sul castello stesso si toglie
+	for u: Sim.U in sim.ulist.duplicate():
+		u.hp = 0.0
+	sim._cleanup_dead()
+	for cs: Dictionary in g.castles:
+		cs.queue = []
+	var fc: Dictionary = g.castles[1]
+	var fp: Vector3 = (fc.center as Vector3) + Vector3(70, 0, 20)
+	sim.cmd_rally(me, 1, fp)
+	check("bandiera piantata", bool(fc.flag_on) and (fc.flag as Vector3).distance_to(Vector3(fp.x, fc.flag.y, fp.z)) < 0.1)
+	check("la bandiera arriva ai client", sim.state_array()[0][1][10] != null)
+	sim.cmd_rally(2, 1, fp + Vector3(5, 0, 0))
+	check("la bandiera di un altro castello non si sposta", (fc.flag as Vector3).x == fp.x)
+	sim.houses[me].gold = 999.0
+	sim.cmd_recruit(me, 1, Defs.FANTE)
+	(fc.queue[0] as Dictionary).t = 0.0
+	sim._tick_castle(fc, 0.1)
+	var rec: Sim.U = null
+	for u: Sim.U in sim.ulist:
+		if u.team == me:
+			rec = u
+	check("la recluta marcia verso la bandiera", rec != null and rec.has_order and rec.to_flag and Vector2(rec.target.x - fp.x, rec.target.z - fp.z).length() < 7.0)
+	sim.cmd_rally(me, 1, fc.center)
+	check("clic destro sul castello: bandiera tolta", not bool(fc.flag_on))
+	sim.cmd_rally(me, 1, fp)
+	sim.cmd_rally_clear(me, 1)
+	check("tasto P: bandiera tolta", not bool(fc.flag_on) and sim.state_array()[0][1][10] == null)
+	sim.cmd_rally(me, 1, fp)
+	var fc_was: int = fc.owner
+	sim._capture(fc, 2)
+	check("chi conquista non eredita la bandiera", not bool(fc.flag_on))
+	fc.owner = fc_was
 	# eventi a sorpresa
 	for u: Sim.U in sim.ulist.duplicate():
 		u.hp = 0.0

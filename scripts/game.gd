@@ -320,6 +320,8 @@ func _exec_cmd(peer: int, kind: String, a: Array) -> void:
 		"power_aim": sim.cmd_power(team, a[0], _clamp_p(a[1]), a[2])
 		"build": sim.cmd_build(team, a[0], _clamp_p(a[1]))
 		"taunt": sim.cmd_taunt(team, a[0])
+		"rally": if _valid_castle(a[0]): sim.cmd_rally(team, a[0], _clamp_p(a[1]))
+		"rally_clear": if _valid_castle(a[0]): sim.cmd_rally_clear(team, a[0])
 
 
 ## I comandi arrivano dalla rete: tipi e lunghezze vanno verificati.
@@ -329,7 +331,8 @@ func _args_ok(kind: String, a: Array) -> bool:
 		"recruit": want = [TYPE_INT, TYPE_INT]
 		"build": want = [TYPE_INT, TYPE_VECTOR3]
 		"order": want = [TYPE_PACKED_INT32_ARRAY, TYPE_VECTOR3, TYPE_BOOL]
-		"garrison", "repair", "taunt": want = [TYPE_INT]
+		"garrison", "repair", "taunt", "rally_clear": want = [TYPE_INT]
+		"rally": want = [TYPE_INT, TYPE_VECTOR3]
 		"mangano", "oil", "power": want = [TYPE_INT, TYPE_VECTOR3]
 		"power_aim": want = [TYPE_INT, TYPE_VECTOR3, TYPE_VECTOR3]
 		"special": want = [TYPE_VECTOR3]
@@ -732,6 +735,14 @@ func castle_at(p: Vector3, margin := 3.0) -> int:
 		if absf(p.x - ce.x) <= WorldGen.R + margin and absf(p.z - ce.z) <= WorldGen.R + margin:
 			return c.id
 	return -1
+
+
+## La bandiera di raduno di un castello, o null se le reclute restano alla porta.
+func castle_flag(id: int) -> Variant:
+	if state.is_empty():
+		return null
+	var row: Array = state[0][id]
+	return row[10] if row.size() > 10 else null
 
 
 func castle_owner(id: int) -> int:
