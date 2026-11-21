@@ -279,7 +279,7 @@ const DRAPPO_GOAL := 600.0
 
 
 ## Quanto chiedono gli Este per il loro castello.
-const LORD_PRICE := 400
+const LORD_PRICE := 1500
 ## Il tributo del Giudice d'Arborea: fiorini, ogni quanti secondi, e per quanto resta offeso chi disturba.
 const TRIBUTE_GOLD := 40.0
 const TRIBUTE_EVERY := 120.0
