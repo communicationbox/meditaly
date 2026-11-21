@@ -2622,6 +2622,31 @@ func _closest_hostile(p: Vector3, team: int, radius: float) -> U:
 	return best
 
 
+## Chi conquista un castello si prende anche le botteghe del vecchio padrone che gli stanno attorno
+## (quelle per cui è il castello più vicino), con il loro potere. Anche i cantieri.
+func _take_shops(c: Dictionary, was: int, team: int) -> void:
+	if was < 0 or was >= Defs.HOUSE_COUNT or was == team:
+		return
+	var n := 0
+	for b: Dictionary in buildings:
+		if int(b.owner) != was:
+			continue
+		var bp := Vector3(float(b.x), 0.0, float(b.z))
+		var near := -1
+		var nd := 1e12
+		for o: Dictionary in castles:
+			var d := Vector2(bp.x - o.center.x, bp.z - o.center.z).length()
+			if d < nd:
+				nd = d
+				near = o.id
+		if near == c.id and nd <= Buildings.RANGE + 10.0:
+			b.owner = team
+			n += 1
+	if n > 0:
+		game.msg_house(team, "Con %s prendi anche %s: ora lavorano per te" % [c.name, "una bottega" if n == 1 else "%d botteghe" % n], UiStyle.GOLD)
+		game.msg_house(was, "Con %s perdi anche %s" % [c.name, "una bottega" if n == 1 else "%d botteghe" % n], UiStyle.DANGER_TEXT)
+
+
 ## bought: il castello è stato comprato (Este), quindi niente premio di conquista.
 func _capture(c: Dictionary, team: int, bought := false) -> void:
 	var was: int = c.owner
@@ -2634,6 +2659,7 @@ func _capture(c: Dictionary, team: int, bought := false) -> void:
 	c.capture_by = -1
 	c.queue = []
 	c.flag_on = false  # la bandiera di raduno era del padrone di prima
+	_take_shops(c, was, team)
 	if not bought:
 		houses[team].gold = float(houses[team].gold) + Defs.CAPTURE_REWARD
 	c.repair = false

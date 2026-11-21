@@ -621,6 +621,23 @@ func _run() -> void:
 	sim._run_event(5)
 	check("scomunica: niente Fede", float(sim._faith_rates(0.5)[lead2]) == 0.0)
 	sim.houses[lead2].excom_until = 0.0
+	# chi conquista un castello si prende le botteghe che gli stanno attorno
+	var shop_c: Dictionary = g.castles[5]
+	var shop_far: Dictionary = g.castles[0]
+	var shop_was: int = shop_c.owner
+	var near_b := {"id": 9901, "type": Defs.B_CASEIFICIO, "owner": shop_was, "x": int(shop_c.center.x) + 50, "z": int(shop_c.center.z), "base": 12, "fx": 1, "fz": 0, "t": 0.0, "T": 1.0, "placed": 0, "fx_t": 0.0, "work": true, "idx": PackedInt32Array()}
+	var far_b := near_b.duplicate()
+	far_b.id = 9902
+	far_b.x = int(shop_far.center.x) + 50
+	far_b.z = int(shop_far.center.z)
+	sim.buildings.append(near_b)
+	sim.buildings.append(far_b)
+	sim._capture(shop_c, 2)
+	check("la bottega vicino al castello conquistato passa a chi conquista", int(near_b.owner) == 2 and sim.has_building(2, Defs.B_CASEIFICIO))
+	check("quella vicino a un altro castello resta dov'è", int(far_b.owner) == shop_was)
+	sim.buildings.erase(near_b)
+	sim.buildings.erase(far_b)
+	shop_c.owner = shop_was
 	# signorie minori: Este si comprano, Malatesta voltagabbana, Arborea paga il tributo
 	for u: Sim.U in sim.ulist.duplicate():
 		u.hp = 0.0
