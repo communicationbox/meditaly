@@ -121,7 +121,21 @@ tests/lobby_net.sh                                    # chi ospita aspetta, l'am
 "$GODOT" --path . -s tests/menu_panels.gd -- CARTELLA     # caricamento, menu, impostazioni, pausa
 "$GODOT" --headless --path . -s tests/castle_layout.gd  # castelli sulla terraferma, distanziati, signorie minori
 "$GODOT" --headless --path . -s tests/castle_map.gd -- Roma 313,397   # mappa percorribile di un castello, X = punti
+"$GODOT" --headless --path . -s tests/updater.gd       # aggiornamenti: download, sha256, motore diverso, avviso nel menu
 ```
+
+## Aggiornamenti
+
+Chi ha già il gioco non deve riscaricarlo intero. All'avvio il gioco legge `aggiornamento.json` dall'ultimo Release di questo repo. Se la versione è più nuova scarica solo il pacchetto dei contenuti (`.pck`, ~20 MB) in `user://aggiornamenti` e ne controlla lo sha256. Poi nel menu propone «Riavvia ora». Al riavvio `scripts/boot.gd` carica il pacchetto prima di aprire il gioco (`scripts/updater.gd`, `scripts/update_notice.gd`). Senza rete parte con quello che ha.
+
+```bash
+tools/pubblica_aggiornamento.sh "Cosa cambia, in una riga"             # solo i contenuti
+tools/pubblica_aggiornamento.sh --completa "Cosa cambia, in una riga"  # anche le build intere Mac e Windows
+```
+
+Lo script alza `version.txt`, esporta i pacchetti macOS e Windows, fa commit, tag `bN` e push, e crea il Release con `gh`. Va lanciato con l'albero di git pulito.
+
+Il pacchetto porta script, scene e risorse. Non porta il motore né `project.godot` o `export_presets.cfg`. Se cambi la versione di Godot o queste impostazioni usa `--completa`: chi ha un motore diverso vede «Scarica» e prende la build intera dal Release.
 
 ## Debug
 
