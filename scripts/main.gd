@@ -14,8 +14,7 @@ var game: Game
 var menu: Control
 
 
-var updater: Updater
-var _notice := {}  # l'avviso di aggiornamento da mostrare nel menu (vuoto: nessuno, o già chiuso)
+var updater: Updater  # solo all'avvio normale (menu): controlla e scarica gli aggiornamenti
 
 
 func _ready() -> void:
@@ -50,8 +49,6 @@ func _ready() -> void:
 		_start_game().start_solo(pref, pname, a)
 	else:
 		updater = Updater.new()
-		updater.update_ready.connect(func(b: int, n: String): _set_notice({"build": b, "note": n}))
-		updater.full_needed.connect(func(b: int, pg: String): _set_notice({"build": b, "page": pg}))
 		add_child(updater)
 		_show_menu()
 
@@ -92,25 +89,12 @@ func _show_menu() -> void:
 	menu.continue_game.connect(func():
 		if not _start_game().start_loaded():
 			back_to_menu())
-	_attach_notice()
-
-
-func _set_notice(d: Dictionary) -> void:
-	_notice = d
-	_attach_notice()
-
-
-func _attach_notice() -> void:
-	if _notice.is_empty() or menu == null:
-		return
-	var n := UpdateNotice.new()
-	n.menu = menu
-	n.updater = updater
-	n.build = _notice.build
-	n.note = _notice.get("note", "")
-	n.page = _notice.get("page", "")
-	n.dismissed.connect(func(): _notice = {})  # «Dopo» lo chiude per tutta la sessione
-	menu.add_child(n)
+	# versione e aggiornamenti, in basso a destra
+	if updater:
+		var vb := UpdateNotice.new()
+		vb.menu = menu
+		vb.updater = updater
+		menu.add_child(vb)
 
 
 ## Dalla fine di una missione alla prossima (o alla stessa, per riprovare): il mondo va rifatto,

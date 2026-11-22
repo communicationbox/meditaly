@@ -126,7 +126,7 @@ tests/lobby_net.sh                                    # chi ospita aspetta, l'am
 
 ## Aggiornamenti
 
-Chi ha già il gioco non deve riscaricarlo intero. All'avvio il gioco legge `aggiornamento.json` dall'ultimo Release di questo repo. Se la versione è più nuova scarica solo il pacchetto dei contenuti (`.pck`, ~20 MB) in `user://aggiornamenti` e ne controlla lo sha256. Poi nel menu propone «Riavvia ora». Al riavvio `scripts/boot.gd` carica il pacchetto prima di aprire il gioco (`scripts/updater.gd`, `scripts/update_notice.gd`). Senza rete parte con quello che ha.
+Chi ha già il gioco non deve riscaricarlo intero. All'avvio il gioco legge `aggiornamento.json` dall'ultimo Release di questo repo. Se la versione è più nuova scarica solo il pacchetto dei contenuti (`.pck`, ~20 MB) in `user://aggiornamenti` e ne controlla lo sha256. Nel menu, in basso a destra, c'è sempre la versione con «Cerca aggiornamenti»: scarica e riavvia da solo. Se il controllo d'avvio ha già scaricato una versione, propone «Aggiorna ora». Al riavvio `scripts/boot.gd` carica il pacchetto prima di aprire il gioco (`scripts/updater.gd`, `scripts/update_notice.gd`). Senza rete parte con quello che ha.
 
 ```bash
 tools/pubblica_aggiornamento.sh "Cosa cambia, in una riga"             # solo i contenuti

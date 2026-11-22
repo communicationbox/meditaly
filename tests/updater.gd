@@ -90,26 +90,80 @@ func _run() -> void:
 	Updater.newest_downloaded()
 	check("pacchetto vecchio cancellato", not FileAccess.file_exists(Updater.pck_path(Version.build() - 1)))
 
-	# l'avviso nel menu, e «Dopo» lo chiude per la sessione
+	# il riquadro nel menu: versione, «Cerca aggiornamenti», download e riavvio da solo
+	_wipe()
 	root.size = Vector2i(1600, 900)
 	var main: Node = (load("res://scenes/main.tscn") as PackedScene).instantiate()
 	root.add_child(main)
 	await create_timer(0.3).timeout
-	main._set_notice({"build": next, "note": "Prova"})
+	var u: Updater = main.updater
+	u.manifest_url = "http://127.0.0.1:%d/aggiornamento.json" % PORT
+	var restarted := [false]
+	u.restart_hook = func(): restarted[0] = true
+	var box := _box(main)
+	check("il menu ha il riquadro della versione", box != null)
+	if box == null:
+		_end()
+		return
 	await process_frame
-	var notes: Array = main.menu.find_children("", "UpdateNotice", true, false)
-	check("il menu mostra l'avviso", notes.size() == 1)
-	if notes.size() == 1:
-		notes[0].dismissed.emit()
-		notes[0].queue_free()
-	await process_frame
+	check("mostra la versione", box.title.text == "Versione %d" % Version.build())
+	check("pulsante «Cerca aggiornamenti»", box.btn.text == "Cerca aggiornamenti" and not box.btn.disabled)
+	_manifest(Version.build(), Updater.engine_version(), sha)
+	box.btn.pressed.emit()
+	await _settle(u)
+	check("già aggiornato: lo dice", box.info.text == "Hai l'ultima versione." and not restarted[0])
+	_manifest(next, Updater.engine_version(), sha)
+	box.btn.pressed.emit()
+	await _settle(u)
+	check("pulsante: scarica e riavvia da solo", restarted[0] and FileAccess.get_sha256(Updater.pck_path(next)) == sha)
+	# il controllo d'avvio invece non riavvia: propone «Aggiorna ora»
+	restarted[0] = false
+	u.status = ""
+	await u.check()
+	await _frames()
+	check("controllo d'avvio: «Aggiorna ora», senza riavviare", box.btn.text == "Aggiorna ora" and box.title.text == "Versione %d pronta" % next and not restarted[0])
+	box.btn.pressed.emit()
+	check("«Aggiorna ora» riavvia", restarted[0])
+	u.status = "ready"
 	main.back_to_menu()
-	await process_frame
-	check("dopo «Dopo» non torna col menu nuovo", main.menu.find_children("", "UpdateNotice", true, false).is_empty())
-	main._set_notice({"build": next, "page": "https://example.org"})
-	await process_frame
-	check("versione completa: avviso con «Scarica»", main.menu.find_children("", "UpdateNotice", true, false).size() == 1)
+	await create_timer(0.2).timeout
+	box = _box(main)
+	check("tornando al menu il riquadro ricorda l'aggiornamento", box != null and box.btn.text == "Aggiorna ora")
+	_manifest(next + 1, "3.0.0", sha)
+	u.status = ""
+	await u.check(true)
+	await _frames()
+	check("motore diverso: «Scarica», niente riavvio", box != null and box.btn.text == "Scarica" and u.status == "full")
+	_manifest(next, Updater.engine_version(), sha)
+	OS.kill(srv_pid)
+	u.status = ""
+	_wipe()
+	await u.check(true)
+	await _frames()
+	check("senza rete: lo dice e si può riprovare", box != null and u.status == "failed" and not box.btn.disabled)
+	_end()
 
+
+func _box(main: Node) -> UpdateNotice:
+	var l: Array = main.menu.find_children("", "UpdateNotice", true, false)
+	return l[0] if l.size() == 1 else null
+
+
+func _settle(u: Updater) -> void:
+	await process_frame
+	var t := Time.get_ticks_msec()
+	while u.status in ["checking", "downloading"] and Time.get_ticks_msec() - t < 20000:
+		await process_frame
+	await process_frame
+
+
+## process_frame arriva prima del _process dei nodi: con due il riquadro ha già ridisegnato
+func _frames() -> void:
+	await process_frame
+	await process_frame
+
+
+func _end() -> void:
 	_wipe()
 	OS.kill(srv_pid)
 	print("FAIL: %d" % fails if fails else "TUTTO OK")
