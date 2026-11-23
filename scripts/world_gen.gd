@@ -83,7 +83,7 @@ func _run(seed_value: int) -> Array:
 	_step(6, 0.78)
 	_plant_trees(cdefs)
 	_step(7, 0.90)
-	w.recompute_all()
+	w.recompute_touched()
 	_step(8, 1.0)
 	return castles
 
@@ -163,11 +163,17 @@ func _stamp(c: Vector2, radius: float, height: float) -> void:
 	var x1 := clampi(int(c.x) + r, 0, WX - 1)
 	var z0 := clampi(int(c.y) - r, 0, WZ - 1)
 	var z1 := clampi(int(c.y) + r, 0, WZ - 1)
+	var r2 := radius * radius
 	for z in range(z0, z1 + 1):
-		for x in range(x0, x1 + 1):
+		var dz := z - c.y
+		# solo la corda del cerchio su questa riga (+1 di margine: il test q < 1 resta quello di prima)
+		var rest := r2 - dz * dz
+		if rest <= 0.0:
+			continue
+		var half := sqrt(rest)
+		for x in range(maxi(x0, int(c.x - half) - 1), mini(x1, int(c.x + half) + 1) + 1):
 			var dx := x - c.x
-			var dz := z - c.y
-			var q := (dx * dx + dz * dz) / (radius * radius)
+			var q := (dx * dx + dz * dz) / r2
 			if q < 1.0:
 				var v := height * (1.0 - q) * (1.0 - q)
 				var i := x + z * WX
@@ -205,11 +211,12 @@ func _compute_heights() -> void:
 	for z in WZ:
 		for x in WX:
 			var i := x + z * WX
-			var coast := sdf[i] + noise_b.get_noise_2d(x, z) * 3.5 + noise_a.get_noise_2d(x, z) * 3.0
+			var na := noise_a.get_noise_2d(x, z)
+			var coast := sdf[i] + noise_b.get_noise_2d(x, z) * 3.5 + na * 3.0
 			if coast <= 0.0:
 				h[i] = clampi(int(SEA - 1 + coast * 0.45), 2, SEA - 1)
 				continue
-			var hills := (noise_a.get_noise_2d(x, z) + 0.45) * 3.2
+			var hills := (na + 0.45) * 3.2
 			var m := mtn[i]
 			var ridge := noise_c.get_noise_2d(x, z)
 			var tall := m * (0.72 + 0.5 * ridge) if m > 0.0 else 0.0
@@ -274,6 +281,8 @@ func _draw_roads(cdefs: Array) -> void:
 
 func _fill_terrain() -> void:
 	var v := w.vox
+	var ct := w.col_top
+	var cs := w.col_sol
 	var dy := VoxelWorld.LAYER_DY
 	for z in range(0, WZ):
 		for x in range(0, WX):
@@ -300,17 +309,25 @@ func _fill_terrain() -> void:
 					top = Defs.FARM if n > 0.0 else Defs.VINE
 				elif n > 0.08:
 					top = Defs.GRASS2
+			# sotto la cima: sabbia sotto il mare, roccia in montagna, altrimenti roccia e 4 di terra
 			var col := i
-			for y in hh:
-				var depth := hh - y
-				var m := Defs.DIRT
-				if depth > 4 or hh > SEA + 9:
-					m = Defs.ROCK
-				if hh < SEA:
-					m = Defs.SAND
-				v[col] = m
-				col += dy
+			if hh < SEA:
+				for y in hh:
+					v[col] = Defs.SAND
+					col += dy
+			elif hh > SEA + 9:
+				for y in hh:
+					v[col] = Defs.ROCK
+					col += dy
+			else:
+				var dirt_from := hh - 4
+				for y in hh:
+					v[col] = Defs.ROCK if y < dirt_from else Defs.DIRT
+					col += dy
 			v[i + hh * dy] = top
+			# colonna piena da 0 a hh: cache già pronte, senza rileggere i voxel
+			ct[i] = hh + 1
+			cs[i] = hh + 1
 	# crateri
 	_crater(Defs.geo(15.0, 37.75), 3, Defs.LAVA)
 	_crater(Defs.geo(14.42, 40.72), 2, Defs.ROCK)

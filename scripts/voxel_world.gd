@@ -29,6 +29,22 @@ var _results: Array = []
 var _mutex := Mutex.new()
 var _pending_tasks: Array[int] = []
 
+## Lontano si vede una copia semplificata del mondo: un gruppo di LOD_G x LOD_G chunk diventa
+## una sola mesh a celle di LOD_S x LOD_S colonne (solo cime e fianchi). Oltre LOD_DIST dal
+## centro del gruppo Godot mostra quella al posto dei chunk (visibility_parent, HLOD):
+## meno triangoli e una draw call invece di sedici.
+const LOD_G := 4
+const LOD_S := 2
+const LOD_DIST := 320.0
+const GX := int(ceil(float(CX) / LOD_G))
+const GZ := int(ceil(float(CZ) / LOD_G))
+var _lod: Array = []
+var _lod_dirty: Dictionary = {}
+var _lod_busy: Dictionary = {}
+var _lod_t: Dictionary = {}  # gruppo -> ultimo ricalcolo (s): sotto assedio basta uno al secondo
+var _pre_lod_gid := -1
+var _pre_lod_res: Array = []
+
 # tabelle facce: per ogni direzione normale, 4 angoli, offset AO
 static var _f_n: Array[Vector3] = []
 static var _f_c: Array = []
@@ -40,6 +56,7 @@ func _init() -> void:
 	vox.resize(WX * WY * WZ)
 	col_top.resize(WX * WZ)
 	col_sol.resize(WX * WZ)
+	gen_touched.resize(WX * WZ)
 	walk_table.resize(256)
 	for m in 256:
 		walk_table[m] = 1 if Defs.blocks_walk(m) else 0
@@ -55,6 +72,19 @@ func _ready() -> void:
 	mat.metallic_specular = 0.1
 	material = mat
 	_inst.resize(CX * CZ)
+	if headless:
+		return
+	_lod.resize(GX * GZ)
+	for g in GX * GZ:
+		var lm := MeshInstance3D.new()
+		lm.material_override = mat
+		var gx := g % GX
+		var gz := g / GX
+		# il box fisso del gruppo: la distanza si misura dal suo centro anche prima della mesh
+		lm.custom_aabb = AABB(Vector3(gx * LOD_G * CH, 0, gz * LOD_G * CH), Vector3(LOD_G * CH, WY, LOD_G * CH))
+		lm.visibility_range_begin = LOD_DIST
+		add_child(lm)
+		_lod[g] = lm
 
 
 static func _setup_tables() -> void:
@@ -112,17 +142,32 @@ func get_v(x: int, y: int, z: int) -> int:
 		return 0
 	return vox[x + z * WX + y * LAYER_DY]
 
-## Scrittura grezza (generazione): non aggiorna cache né mesh.
+## Scrittura grezza (generazione): non aggiorna cache né mesh, segna solo la colonna in gen_touched.
 func put(x: int, y: int, z: int, m: int) -> void:
 	if x < 0 or z < 0 or y < 0 or x >= WX or z >= WZ or y >= WY:
 		return
 	vox[x + z * WX + y * LAYER_DY] = m
+	gen_touched[x + z * WX] = 1
+
+## Colonne scritte con put() dopo il riempimento del terreno: solo queste vanno ricalcolate.
+var gen_touched := PackedByteArray()
 
 func recompute_all() -> void:
 	var gid := WorkerThreadPool.add_group_task(func(z: int):
 		for x in WX:
 			_recompute_col(x, z), WZ)
 	WorkerThreadPool.wait_for_group_task_completion(gid)
+
+## Fine generazione: col_top e col_sol del terreno li ha già scritti WorldGen, qui si
+## ricalcolano solo le colonne toccate da put() (castelli, crateri, monumenti, alberi).
+func recompute_touched() -> void:
+	var gid := WorkerThreadPool.add_group_task(func(z: int):
+		var r := z * WX
+		for x in WX:
+			if gen_touched[r + x] != 0:
+				_recompute_col(x, z), WZ)
+	WorkerThreadPool.wait_for_group_task_completion(gid)
+	gen_touched.fill(0)
 
 func _recompute_col(x: int, z: int) -> void:
 	var top := 0
@@ -174,6 +219,16 @@ func _mark(x: int, z: int) -> void:
 	if lx == CH - 1 and cx < CX - 1: _dirty[cx + 1 + cz * CX] = true
 	if lz == 0 and cz > 0: _dirty[cx + (cz - 1) * CX] = true
 	if lz == CH - 1 and cz < CZ - 1: _dirty[cx + (cz + 1) * CX] = true
+	if not headless:
+		_lod_dirty[_lod_group(x / LOD_S * LOD_S, z / LOD_S * LOD_S)] = true
+		# una cella sul bordo cambia anche il fianco del gruppo vicino
+		_lod_dirty[_lod_group(mini(x + LOD_S, WX - 1), z)] = true
+		_lod_dirty[_lod_group(maxi(x - LOD_S, 0), z)] = true
+		_lod_dirty[_lod_group(x, mini(z + LOD_S, WZ - 1))] = true
+		_lod_dirty[_lod_group(x, maxi(z - LOD_S, 0))] = true
+
+func _lod_group(x: int, z: int) -> int:
+	return x / (CH * LOD_G) + z / (CH * LOD_G) * GX
 
 func hash_world() -> int:
 	return hash(vox)
@@ -311,7 +366,17 @@ func build_all_blocking() -> void:
 	var res: Array = []
 	res.resize(count)
 	var gid := WorkerThreadPool.add_group_task(func(n: int): res[n] = _mesh_chunk(int(keys[n]) % CX, int(keys[n]) / CX), count)
+	var lod_res: Array = []
+	var lod_gid := -1
+	if not headless and not all_built:
+		lod_res.resize(GX * GZ)
+		lod_gid = WorkerThreadPool.add_group_task(func(g: int): lod_res[g] = _mesh_lod(g), GX * GZ)
 	WorkerThreadPool.wait_for_group_task_completion(gid)
+	if lod_gid >= 0:
+		WorkerThreadPool.wait_for_group_task_completion(lod_gid)
+		for g in GX * GZ:
+			_install_lod(g, lod_res[g])
+		_lod_dirty.clear()
 	for n in count:
 		_install(int(keys[n]), res[n])
 		if all_built:
@@ -329,12 +394,25 @@ func prebuild_step(budget_ms := 10) -> bool:
 		_pre_res = []
 		_pre_res.resize(count)
 		_pre_gid = WorkerThreadPool.add_group_task(_pre_mesh, count)
+		if not headless:
+			_pre_lod_res = []
+			_pre_lod_res.resize(GX * GZ)
+			_pre_lod_gid = WorkerThreadPool.add_group_task(_pre_lod, GX * GZ)
 		return false
 	if _pre_gid >= 0:
 		if not WorkerThreadPool.is_group_task_completed(_pre_gid):
 			return false
+		if _pre_lod_gid >= 0 and not WorkerThreadPool.is_group_task_completed(_pre_lod_gid):
+			return false
 		WorkerThreadPool.wait_for_group_task_completion(_pre_gid)
 		_pre_gid = -1
+		if _pre_lod_gid >= 0:
+			WorkerThreadPool.wait_for_group_task_completion(_pre_lod_gid)
+			_pre_lod_gid = -1
+			for g in GX * GZ:
+				_install_lod(g, _pre_lod_res[g])
+			_pre_lod_res = []
+			_lod_dirty.clear()
 	var t0 := Time.get_ticks_msec()
 	while _pre_i < count and Time.get_ticks_msec() - t0 < budget_ms:
 		_install(_pre_i, _pre_res[_pre_i])
@@ -349,6 +427,106 @@ func prebuild_step(budget_ms := 10) -> bool:
 func _pre_mesh(k: int) -> void:
 	_pre_res[k] = _mesh_chunk(k % CX, k / CX)
 
+func _pre_lod(g: int) -> void:
+	_pre_lod_res[g] = _mesh_lod(g)
+
+## Mesh semplificata di un gruppo: per ogni cella LOD_S x LOD_S la colonna più alta dà quota e
+## colore della cima; dove la cella vicina è più bassa scende un fianco fino alla sua quota.
+## Le celle di fondale profondo non si disegnano, come nei chunk: l'acqua lì è opaca.
+func _mesh_lod(g: int) -> Dictionary:
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var cols := PackedColorArray()
+	var inds := PackedInt32Array()
+	var ctop := col_top
+	var vx := vox
+	var pal := Defs.PALETTE.duplicate()
+	var f_c := _f_c.duplicate(true)
+	var f_n := _f_n.duplicate()
+	var x0 := (g % GX) * LOD_G * CH
+	var z0 := (g / GX) * LOD_G * CH
+	var x1 := mini(x0 + LOD_G * CH, WX)
+	var z1 := mini(z0 + LOD_G * CH, WZ)
+	# come nei chunk: sotto SEA - 5 l'acqua è opaca e il fondale non si disegna
+	var floor_y := Defs.SEA - 5
+	var vc := 0
+	for z in range(z0, z1, LOD_S):
+		for x in range(x0, x1, LOD_S):
+			var h := _lod_h(ctop, x, z)
+			if h <= floor_y:
+				continue
+			# la colonna più alta della cella: il suo voxel di cima dà il colore
+			var bx := x
+			var bz := z
+			for dz in LOD_S:
+				for dx in LOD_S:
+					if x + dx < WX and z + dz < WZ and ctop[x + dx + (z + dz) * WX] == h:
+						bx = x + dx
+						bz = z + dz
+			var m: int = vx[bx + bz * WX + (h - 1) * LAYER_DY]
+			var c0: Color = Defs.HOUSES[m - Defs.TEAM0].color if m >= Defs.TEAM0 else pal[m]
+			var hv: int = (bx * 73856093 ^ (h - 1) * 19349663 ^ bz * 83492791) & 255
+			var vary := 0.93 + float(hv) / 255.0 * 0.14
+			if m == Defs.GRASS or m == Defs.GRASS2:
+				vary = 0.86 + float(hv) / 255.0 * 0.24
+			var top_c := Color(c0.r * vary, c0.g * vary, c0.b * vary)
+			var side_c := Color(top_c.r * 0.7, top_c.g * 0.7, top_c.b * 0.7)
+			var w := mini(LOD_S, WX - x)
+			var dpt := mini(LOD_S, WZ - z)
+			# d: 0 +x, 1 -x, 2 su, 4 +z, 5 -z (come _f_c / _f_n)
+			for d: int in [2, 0, 1, 4, 5]:
+				var low := floor_y
+				if d == 0: low = maxi(_lod_h(ctop, x + LOD_S, z), floor_y)
+				elif d == 1: low = maxi(_lod_h(ctop, x - LOD_S, z), floor_y)
+				elif d == 4: low = maxi(_lod_h(ctop, x, z + LOD_S), floor_y)
+				elif d == 5: low = maxi(_lod_h(ctop, x, z - LOD_S), floor_y)
+				if d == 2:
+					low = h - 1
+				elif low >= h:
+					continue
+				var o := Vector3(x, low, z)
+				var size := Vector3(w, h - low, dpt)
+				var cs: Array = f_c[d]
+				var nrm: Vector3 = f_n[d]
+				var c := top_c if d == 2 else side_c
+				for k in 4:
+					verts.append(o + (cs[k] as Vector3) * size)
+					norms.append(nrm)
+					cols.append(c)
+				inds.append(vc); inds.append(vc + 1); inds.append(vc + 2)
+				inds.append(vc); inds.append(vc + 2); inds.append(vc + 3)
+				vc += 4
+	return {"v": verts, "n": norms, "c": cols, "i": inds}
+
+## Quota della cella che comincia in (x, z): la colonna più alta; 0 fuori dal mondo.
+static func _lod_h(ctop: PackedByteArray, x: int, z: int) -> int:
+	if x < 0 or z < 0 or x >= WX or z >= WZ:
+		return 0
+	x = x / LOD_S * LOD_S
+	z = z / LOD_S * LOD_S
+	var h := 0
+	for dz in LOD_S:
+		for dx in LOD_S:
+			if x + dx < WX and z + dz < WZ:
+				h = maxi(h, ctop[x + dx + (z + dz) * WX])
+	return h
+
+func _install_lod(g: int, data: Dictionary) -> void:
+	var lm: MeshInstance3D = _lod[g]
+	var verts: PackedVector3Array = data.v
+	if verts.is_empty():
+		lm.mesh = null
+		return
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = data.n
+	arrays[Mesh.ARRAY_COLOR] = data.c
+	arrays[Mesh.ARRAY_INDEX] = data.i
+	var am := ArrayMesh.new()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	lm.mesh = am
+
 func _mesh_chunk(cx: int, cz: int, want_faces := false) -> Dictionary:
 	var faces := PackedVector3Array()
 	var verts := PackedVector3Array()
@@ -360,58 +538,83 @@ func _mesh_chunk(cx: int, cz: int, want_faces := false) -> Dictionary:
 	var z0 := cz * CH
 	var x1 := mini(x0 + CH, WX)
 	var z1 := mini(z0 + CH, WZ)
-	var sz := vox.size()
-	var pal := Defs.PALETTE
+	# copie locali: le tabelle condivise lette da tutti i worker a ogni faccia si contendono
+	# il contatore dei riferimenti; una copia per chunk costa poco e rende i worker indipendenti
+	var vx := vox
+	var ctop := col_top
+	var csol := col_sol
+	var wt := walk_table
+	var f_off := _f_off.duplicate()
+	var f_ao := _f_ao.duplicate(true)
+	var f_c := _f_c.duplicate(true)
+	var f_n := _f_n.duplicate()
+	var aof := PackedFloat64Array(AO_F)
+	var sz := vx.size()
+	var pal := Defs.PALETTE.duplicate()
+	var deep := Defs.SEA - 5
+	var a := PackedInt32Array([0, 0, 0, 0])
 	for z in range(z0, z1):
 		for x in range(x0, x1):
 			var ci := x + z * WX
-			var top: int = col_top[ci]
+			var top: int = ctop[ci]
 			if top == 0:
 				continue
 			# parti dal livello più basso che può avere facce visibili
-			var ymin: int = col_sol[ci]
-			if x > 0: ymin = mini(ymin, col_sol[ci - 1])
-			if x < WX - 1: ymin = mini(ymin, col_sol[ci + 1])
-			if z > 0: ymin = mini(ymin, col_sol[ci - WX])
-			if z < WZ - 1: ymin = mini(ymin, col_sol[ci + WX])
+			var ymin: int = csol[ci]
+			if x > 0: ymin = mini(ymin, csol[ci - 1])
+			if x < WX - 1: ymin = mini(ymin, csol[ci + 1])
+			if z > 0: ymin = mini(ymin, csol[ci - WX])
+			if z < WZ - 1: ymin = mini(ymin, csol[ci + WX])
 			ymin = maxi(ymin - 1, 0)
 			for y in range(ymin, top):
 				var i := ci + y * LAYER_DY
-				var m: int = vox[i]
+				var m: int = vx[i]
 				if m == 0:
 					continue
-				var c0: Color = Defs.HOUSES[m - Defs.TEAM0].color if m >= Defs.TEAM0 else pal[m]
-				var hv: int = (x * 73856093 ^ y * 19349663 ^ z * 83492791) & 255
-				var vary := 0.93 + float(hv) / 255.0 * 0.14
-				if m == Defs.GRASS or m == Defs.GRASS2:
-					vary = 0.86 + float(hv) / 255.0 * 0.24
-				var r := c0.r * vary
-				var g := c0.g * vary
-				var b := c0.b * vary
+				var colored := false
+				var r := 0.0
+				var g := 0.0
+				var b := 0.0
 				for d in 6:
-					var ni: int = i + _f_off[d]
-					if ni >= 0 and ni < sz and vox[ni] != 0:
+					# fondale profondo: l'acqua lì è opaca (environment.gd, ALPHA a 1 oltre 4,5 di
+					# profondità), quindi niente grafica; resta solo il piano per le collisioni
+					if y < deep:
+						if d == 2 and want_faces and wt[m] == 1 and (i + LAYER_DY >= sz or vx[i + LAYER_DY] == 0):
+							var o0 := Vector3(x, y, z)
+							var cs0: Array = f_c[2]
+							faces.append(o0 + (cs0[0] as Vector3)); faces.append(o0 + (cs0[1] as Vector3)); faces.append(o0 + (cs0[2] as Vector3))
+							faces.append(o0 + (cs0[0] as Vector3)); faces.append(o0 + (cs0[2] as Vector3)); faces.append(o0 + (cs0[3] as Vector3))
+						continue
+					var ni: int = i + f_off[d]
+					if ni >= 0 and ni < sz and vx[ni] != 0:
 						continue
 					# bordi del mondo: niente facce
 					if (d == 0 and x == WX - 1) or (d == 1 and x == 0) or (d == 4 and z == WZ - 1) or (d == 5 and z == 0) or (d == 3 and y == 0):
 						continue
-					# fondale profondo coperto dall'acqua
-					if y < Defs.SEA - 5 and d != 2:
-						continue
-					var ao: PackedInt32Array = _f_ao[d]
-					var cs: Array = _f_c[d]
-					var nrm: Vector3 = _f_n[d]
-					var a := PackedInt32Array([0, 0, 0, 0])
+					if not colored:
+						# il colore serve solo ai voxel con almeno una faccia visibile
+						colored = true
+						var c0: Color = Defs.HOUSES[m - Defs.TEAM0].color if m >= Defs.TEAM0 else pal[m]
+						var hv: int = (x * 73856093 ^ y * 19349663 ^ z * 83492791) & 255
+						var vary := 0.93 + float(hv) / 255.0 * 0.14
+						if m == Defs.GRASS or m == Defs.GRASS2:
+							vary = 0.86 + float(hv) / 255.0 * 0.24
+						r = c0.r * vary
+						g = c0.g * vary
+						b = c0.b * vary
+					var ao: PackedInt32Array = f_ao[d]
+					var cs: Array = f_c[d]
+					var nrm: Vector3 = f_n[d]
 					for k in 4:
 						var a1: int = i + ao[k * 3]
 						var a2: int = i + ao[k * 3 + 1]
 						var a3: int = i + ao[k * 3 + 2]
-						var s1 := 1 if a1 >= 0 and a1 < sz and vox[a1] != 0 else 0
-						var s2 := 1 if a2 >= 0 and a2 < sz and vox[a2] != 0 else 0
-						var s3 := 1 if a3 >= 0 and a3 < sz and vox[a3] != 0 else 0
+						var s1 := 1 if a1 >= 0 and a1 < sz and vx[a1] != 0 else 0
+						var s2 := 1 if a2 >= 0 and a2 < sz and vx[a2] != 0 else 0
+						var s3 := 1 if a3 >= 0 and a3 < sz and vx[a3] != 0 else 0
 						var lvl := 0 if (s1 == 1 and s2 == 1) else 3 - (s1 + s2 + s3)
 						a[k] = lvl
-						var f: float = AO_F[lvl]
+						var f: float = aof[lvl]
 						var cv: Vector3 = cs[k]
 						verts.append(Vector3(x + cv.x, y + cv.y, z + cv.z))
 						norms.append(nrm)
@@ -422,7 +625,7 @@ func _mesh_chunk(cx: int, cz: int, want_faces := false) -> Dictionary:
 					else:
 						inds.append(vc + 1); inds.append(vc + 2); inds.append(vc + 3)
 						inds.append(vc + 1); inds.append(vc + 3); inds.append(vc)
-					if want_faces and walk_table[m] == 1:
+					if want_faces and wt[m] == 1:
 						var o := Vector3(x, y, z)
 						var c0v: Vector3 = o + (cs[0] as Vector3)
 						var c1v: Vector3 = o + (cs[1] as Vector3)
@@ -451,6 +654,12 @@ func _install(k: int, data: Dictionary) -> void:
 		mi.material_override = material
 		add_child(mi)
 		_inst[k] = mi
+		if not _lod.is_empty():
+			# visibile solo finché il gruppo semplificato è nascosto perché la camera è vicina;
+			# i gruppi tutti di mare non hanno copia semplificata: lì i chunk restano sempre
+			var lm: MeshInstance3D = _lod[_lod_group(k % CX * CH, k / CX * CH)]
+			if lm.mesh != null:
+				mi.visibility_parent = mi.get_path_to(lm)
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
@@ -509,6 +718,11 @@ func _process(_dt: float) -> void:
 	_results = []
 	_mutex.unlock()
 	for r: Array in ready_res:
+		if r[0] < 0:
+			var g: int = -1 - r[0]
+			_lod_busy.erase(g)
+			_install_lod(g, r[1])
+			continue
 		_busy.erase(r[0])
 		_install(r[0], r[1])
 	var i := _pending_tasks.size() - 1
@@ -528,15 +742,35 @@ func _process(_dt: float) -> void:
 		_busy[k] = true
 		launched += 1
 		_pending_tasks.append(WorkerThreadPool.add_task(_mesh_task.bind(k, _collide.has(k))))
+	# i gruppi semplificati cambiati: al più uno per fotogramma e ognuno al più una volta al secondo
+	if all_built and not _lod_dirty.is_empty():
+		var now := Time.get_ticks_msec() / 1000.0
+		for g: int in _lod_dirty.keys():
+			if _lod_busy.has(g) or now - float(_lod_t.get(g, -10.0)) < 1.0:
+				continue
+			_lod_dirty.erase(g)
+			_lod_busy[g] = true
+			_lod_t[g] = now
+			_pending_tasks.append(WorkerThreadPool.add_task(_lod_task.bind(g)))
+			break
 
 ## I worker leggono i dati del mondo: vanno attesi prima che il nodo venga liberato.
 func _exit_tree() -> void:
 	if _pre_gid >= 0:
 		WorkerThreadPool.wait_for_group_task_completion(_pre_gid)
 		_pre_gid = -1
+	if _pre_lod_gid >= 0:
+		WorkerThreadPool.wait_for_group_task_completion(_pre_lod_gid)
+		_pre_lod_gid = -1
 	for t in _pending_tasks:
 		WorkerThreadPool.wait_for_task_completion(t)
 	_pending_tasks.clear()
+
+func _lod_task(g: int) -> void:
+	var data := _mesh_lod(g)
+	_mutex.lock()
+	_results.append([-1 - g, data])
+	_mutex.unlock()
 
 func _mesh_task(k: int, want_faces: bool) -> void:
 	var data := _mesh_chunk(k % CX, k / CX, want_faces)

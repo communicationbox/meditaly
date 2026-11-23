@@ -361,6 +361,10 @@ func setup(g: Node, castle_defs: Array) -> void:
 			var u := spawn_unit(t, c.owner, (c.rally as Vector3) + off)
 			if c.owner == Defs.NEUTRAL:
 				u.home = u.pos
+	# i campi di percorso dei castelli si calcolano qui, al caricamento: il primo calcolo
+	# durante la partita costava ~25 ms in un tick solo, appena qualcuno si avvicinava
+	for c: Dictionary in castles:
+		_compute_field(c)
 
 
 # ---------------------------------------------------------------- comandi
@@ -928,6 +932,7 @@ func _physics_process(dt: float) -> void:
 
 func tick(dt: float) -> void:
 	time += dt
+	_plans_left = PLAN_PER_TICK
 	_rebuild_grid()
 	bards.clear()
 	for u: U in ulist:
@@ -937,6 +942,7 @@ func tick(dt: float) -> void:
 		if u.hp > 0.0:
 			_tick_unit(u, dt)
 	_cleanup_dead()
+	_advance_fields()
 	_tick_projectiles(dt)
 	_tick_wheels(dt)
 	_tick_sched(dt)
@@ -1586,7 +1592,10 @@ func _apply_fall(u: U, ny: float, dt: float) -> void:
 
 func _dir_from_field(u: U, c: Dictionary) -> Vector3:
 	if c.field_dirty and time - float(c.field_t) > 1.5:
-		_compute_field(c)
+		if (c.field as PackedInt32Array).is_empty():
+			_compute_field(c)
+		else:
+			_queue_field(c)
 	var f: PackedInt32Array = c.field
 	if f.is_empty():
 		return Vector3.ZERO
@@ -1613,7 +1622,15 @@ func _dir_from_field(u: U, c: Dictionary) -> Vector3:
 
 
 ## BFS dal punto di conquista: tiene conto delle brecce aperte nelle mura.
+## Il primo campo di un castello si calcola subito; i ricalcoli (mura che cadono) vanno a
+## fette di FIELD_STEP caselle per tick in _advance_fields, e intanto vale il campo vecchio:
+## un campo intero costa ~25 ms e in un tick solo faceva scattare la partita durante gli assedi.
 func _compute_field(c: Dictionary) -> void:
+	var job := _field_begin(c)
+	_field_run(job, 1 << 30)
+
+
+func _field_begin(c: Dictionary) -> Dictionary:
 	c.field_dirty = false
 	c.field_t = time
 	var f := PackedInt32Array()
@@ -1628,32 +1645,72 @@ func _compute_field(c: Dictionary) -> void:
 	var start := sx + sz * FIELD_D
 	f[start] = 0
 	ys[start] = cap.y
-	var q := PackedInt32Array([start])
-	var head := 0
-	var ox := int(ce.x) - FIELD_R
-	var oz := int(ce.z) - FIELD_R
-	while head < q.size():
+	return {"c": c, "f": f, "ys": ys, "q": PackedInt32Array([start]), "head": 0, "ox": int(ce.x) - FIELD_R, "oz": int(ce.z) - FIELD_R}
+
+
+## Avanza la BFS di al più budget caselle; a BFS finita il campo passa al castello.
+func _field_run(job: Dictionary, budget: int) -> bool:
+	var f: PackedInt32Array = job.f
+	var ys: PackedFloat32Array = job.ys
+	var q: PackedInt32Array = job.q
+	var head: int = job.head
+	var ox: int = job.ox
+	var oz: int = job.oz
+	var w := world
+	var stop := head + budget
+	while head < q.size() and head < stop:
 		var cur: int = q[head]
 		head += 1
 		var cx := cur % FIELD_D
 		var cz := cur / FIELD_D
-		for n: Vector2i in [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1)]:
-			var nx := cx + n.x
-			var nz := cz + n.y
+		var cy: float = ys[cur]
+		var cd: int = f[cur] + 1
+		# vicini nell'ordine +x, -x, +z, -z: l'ordine decide da quale casella si eredita la quota
+		for n in 4:
+			var nx := cx + (1 if n == 0 else -1 if n == 1 else 0)
+			var nz := cz + (1 if n == 2 else -1 if n == 3 else 0)
 			if nx < 0 or nz < 0 or nx >= FIELD_D or nz >= FIELD_D:
 				continue
 			var k := nx + nz * FIELD_D
 			if f[k] >= 0:
 				continue
-			var ny := world.walk_y(ox + nx + 0.5, ys[cur], oz + nz + 0.5, true)
+			var ny := w.walk_y(ox + nx + 0.5, cy, oz + nz + 0.5, true)
 			if ny < -999.0:
 				continue
-			if ys[cur] - ny > 1.6:
+			if cy - ny > 1.6:
 				continue  # nella direzione inversa sarebbe un dislivello in salita
-			f[k] = f[cur] + 1
+			f[k] = cd
 			ys[k] = ny
 			q.append(k)
-	c.field = f
+	job.head = head
+	job.q = q
+	if head < q.size():
+		return false
+	(job.c as Dictionary).field = f
+	return true
+
+
+const FIELD_STEP := 2500
+var _field_jobs: Array[Dictionary] = []
+
+
+func _advance_fields() -> void:
+	var budget := FIELD_STEP
+	while budget > 0 and not _field_jobs.is_empty():
+		var job: Dictionary = _field_jobs[0]
+		var before: int = job.head
+		if _field_run(job, budget):
+			_field_jobs.remove_at(0)
+		budget -= int(job.head) - before
+
+
+## Un ricalcolo già in corso non riparte da capo (con molti assedi insieme non finirebbe mai):
+## il castello resta da rifare e il giro dopo prende le mura cadute nel frattempo.
+func _queue_field(c: Dictionary) -> void:
+	for job: Dictionary in _field_jobs:
+		if is_same(job.c, c):
+			return
+	_field_jobs.append(_field_begin(c))
 
 
 func _move_to(u: U, dest: Vector3, dt: float, d: Dictionary, can_chop: bool) -> void:
@@ -1865,7 +1922,18 @@ func _segment_hits_square(a: Vector3, b: Vector3, c: Vector3, h: float) -> bool:
 ## false se nessuna casella è sensibilmente più vicina di dove si trova già.
 const PLAN_R := 40
 const PLAN_DIRS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1), Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1)]
+## Al più PLAN_PER_TICK ricerche per tick: ognuna costa ~10 ms e un gruppo fermo contro un muro
+## le faceva partire tutte nello stesso tick (scatti da 40 ms e oltre). Chi resta senza turno
+## si comporta come se la ricerca fosse fallita e riprova al tick dopo.
+const PLAN_PER_TICK := 1
+var _plans_left := PLAN_PER_TICK
+
+
 func _plan_local(u: U, dest: Vector3) -> bool:
+	if _plans_left <= 0:
+		u.replan_cd = 0.0
+		return false
+	_plans_left -= 1
 	var D := PLAN_R * 2 + 1
 	var ox := int(floor(u.pos.x)) - PLAN_R
 	var oz := int(floor(u.pos.z)) - PLAN_R
@@ -3564,6 +3632,7 @@ func load_state(d: Dictionary) -> void:
 		for k: String in e:
 			castles[i][k] = e[k]
 		castles[i].field_dirty = true
+	_field_jobs.clear()
 	ulist.clear()
 	by_id.clear()
 	for e: Dictionary in d.units:
