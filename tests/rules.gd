@@ -844,6 +844,30 @@ func _run() -> void:
 	for u: Sim.U in sim.ulist.duplicate():
 		u.hp = 0.0
 	sim._cleanup_dead()
+	# balestrieri sulle mura: con un ordine scendono e arrivano giù vivi e interi
+	var gc: Dictionary = g.castles[13]
+	gc.owner = 3
+	var ai_was := sim.ai_enabled
+	sim.ai_enabled = false
+	var archer := sim.spawn_unit(Defs.BALESTRIERE, 3, gc.center)
+	sim.cmd_garrison(3, gc.id)
+	var up_y := archer.pos.y
+	check("mura: il balestriere sale sulle mura", archer.garrison and up_y > float(gc.center.y) + 8.0)
+	sim.cmd_order(3, PackedInt32Array([archer.id]), (gc.gate_out as Vector3) + (gc.dir as Vector3) * 25.0, false)
+	for k in int(Defs.SIM_HZ * 12):
+		sim.tick(1.0 / Defs.SIM_HZ)
+	var full := float(Defs.UNITS[Defs.BALESTRIERE].hp)
+	check("mura: scende dalle mura senza farsi male (vita %.0f/%.0f, quota %.0f → %.0f)" % [archer.hp, full, up_y, archer.pos.y], archer.hp >= full and archer.pos.y < up_y - 8.0)
+	# una caduta vera (senza ordine di scendere) fa ancora male
+	var faller := sim.spawn_unit(Defs.FANTE, 3, archer.pos)
+	faller.pos.y = archer.pos.y + 14.0  # spawn_unit lo posa a terra: lo rimettiamo in aria
+	for k in int(Defs.SIM_HZ * 2):
+		sim._apply_fall(faller, archer.pos.y, 1.0 / Defs.SIM_HZ)
+	check("mura: chi cade da 14 blocchi si fa male (vita %.0f)" % faller.hp, faller.hp < float(Defs.UNITS[Defs.FANTE].hp))
+	faller.hp = 0.0
+	archer.hp = 0.0
+	sim._cleanup_dead()
+	sim.ai_enabled = ai_was
 	# modalità A tempo: allo scadere vince chi ha più castelli
 	for cs: Dictionary in g.castles:
 		cs.owner = cs.start_house

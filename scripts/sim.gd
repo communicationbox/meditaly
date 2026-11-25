@@ -33,6 +33,8 @@ class U:
 	var yaw := 0.0
 	var stuck := 0.0
 	var fall_from := -1.0
+	## Fino a quando (Sim.time) scende dalle mura per un ordine: si cala giù, la caduta non fa male.
+	var descend := 0.0
 	## Castello proprio da cui sta uscendo (-1 = nessuno): resta valido finché non ha passato la porta.
 	var exiting := -1
 	## Percorso locale trovato quando era bloccata (vicoli ciechi, borghi, monumenti).
@@ -507,6 +509,8 @@ func cmd_order(team: int, ids: PackedInt32Array, point: Vector3, on_struct: bool
 		var row := k / cols
 		var col := k % cols
 		var offs := side * ((col - (cols - 1) * 0.5) * 2.0) - fwd * (row * 2.0)
+		if u.garrison:
+			u.descend = time + 5.0
 		u.garrison = false
 		u.has_order = true
 		u.stuck = 0.0
@@ -1580,8 +1584,10 @@ func _apply_fall(u: U, ny: float, dt: float) -> void:
 		u.pos.y = maxf(u.pos.y - 22.0 * dt, ny)
 		if u.pos.y <= ny:
 			var drop := u.fall_from - ny
-			if drop > 4.0 and not u.water:
-				_hurt(u, drop * 3.0)
+			if drop > 4.0:
+				if not u.water and time >= u.descend:
+					_hurt(u, drop * 3.0)
+				u.descend = 0.0  # arrivato giù: da qui in poi le cadute fanno di nuovo male
 			u.fall_from = -1.0
 			if u.garrison:
 				u.garrison = false
