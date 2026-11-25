@@ -14,6 +14,17 @@ static var volume := 0.8
 static var muted := false
 static var music := true
 static var fullscreen := false
+## Qualità grafica (vedi apply_gfx). Sui Mac Intel parte da Leggera: la GPU integrata non regge
+## la risoluzione Retina piena con MSAA, bagliore e ombre a due fasce.
+const GFX := [
+	{"name": "Leggera", "desc": "La più fluida, per computer poco potenti"},
+	{"name": "Media", "desc": "Più nitida, ombre e bagliore restano"},
+	{"name": "Alta", "desc": "Tutto al massimo"},
+]
+const GFX_LIGHT := 0
+const GFX_MID := 1
+const GFX_HIGH := 2
+static var gfx := GFX_LIGHT if OS.has_feature("macos") and OS.has_feature("x86_64") else GFX_HIGH
 static var difficulty := 1
 static var equal_houses := false
 ## Modalità della partita libera: vedi Defs.MODES.
@@ -34,11 +45,19 @@ static func load_all() -> void:
 		muted = bool(cf.get_value("audio", "muto", muted))
 		music = bool(cf.get_value("audio", "musica", music))
 		fullscreen = bool(cf.get_value("schermo", "intero", fullscreen))
+		gfx = clampi(int(cf.get_value("schermo", "grafica", gfx)), 0, GFX.size() - 1)
 		difficulty = clampi(int(cf.get_value("partita", "difficolta", difficulty)), 0, DIFFS.size() - 1)
 		equal_houses = bool(cf.get_value("partita", "casate_uguali", equal_houses))
 		mode = clampi(int(cf.get_value("partita", "modalita", mode)), 0, Defs.MODES.size() - 1)
 		player_name = String(cf.get_value("partita", "nome", player_name))
 		story_done = clampi(int(cf.get_value("storia", "vinte", story_done)), 0, Campaign.MISSIONS.size())
+	# per le prove: --grafica leggera|media|alta vale solo per questa volta (non si salva)
+	var a := OS.get_cmdline_user_args()
+	var gi := a.find("--grafica")
+	if gi >= 0 and gi + 1 < a.size():
+		for k in GFX.size():
+			if (GFX[k].name as String).to_lower() == a[gi + 1].to_lower():
+				gfx = k
 	apply()
 
 
@@ -48,6 +67,7 @@ static func save_all() -> void:
 	cf.set_value("audio", "muto", muted)
 	cf.set_value("audio", "musica", music)
 	cf.set_value("schermo", "intero", fullscreen)
+	cf.set_value("schermo", "grafica", gfx)
 	cf.set_value("partita", "difficolta", difficulty)
 	cf.set_value("partita", "casate_uguali", equal_houses)
 	cf.set_value("partita", "modalita", mode)
@@ -63,6 +83,30 @@ static func apply() -> void:
 		var want := DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
 		if DisplayServer.window_get_mode() != want and not (not fullscreen and DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_MAXIMIZED):
 			DisplayServer.window_set_mode(want)
+	apply_gfx()
+
+
+## Applica la qualità grafica alla finestra e a ogni scena 3D nel gruppo "gfx" (environment.gd).
+static func apply_gfx() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null or DisplayServer.get_name() == "headless":
+		return
+	var vp := tree.root
+	var hidpi := DisplayServer.screen_get_scale() >= 1.5
+	# 3D a risoluzione ridotta e ingrandito con FSR; l'interfaccia resta nitida
+	var scale := 1.0
+	if gfx == GFX_LIGHT:
+		scale = 0.5 if hidpi else 0.75
+	elif gfx == GFX_MID:
+		scale = 0.75 if hidpi else 1.0
+	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR if scale < 1.0 else Viewport.SCALING_3D_MODE_BILINEAR
+	vp.scaling_3d_scale = scale
+	vp.fsr_sharpness = 0.4
+	vp.msaa_3d = Viewport.MSAA_2X if gfx == GFX_HIGH else Viewport.MSAA_DISABLED
+	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_DISABLED if gfx == GFX_HIGH else Viewport.SCREEN_SPACE_AA_FXAA
+	RenderingServer.directional_shadow_atlas_set_size(2048 if gfx == GFX_LIGHT else 4096, true)
+	RenderingServer.directional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_HARD if gfx == GFX_LIGHT else RenderingServer.SHADOW_QUALITY_SOFT_LOW)
+	tree.call_group("gfx", "apply_gfx")
 
 
 static func diff() -> Dictionary:
@@ -77,6 +121,7 @@ class SettingsPanel:
 
 	const W := 680.0
 	var _diff_cards: Array[Button] = []
+	var _gfx_cards: Array[Button] = []
 
 	func _ready() -> void:
 		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -155,12 +200,29 @@ class SettingsPanel:
 			Settings.fullscreen = on
 			Settings.apply()
 			Settings.save_all()))
+		v.add_child(_gap(10))
+		v.add_child(UiStyle.label("Grafica", 20, UiStyle.INK))
+		v.add_child(_gap(6))
+		var gh := HBoxContainer.new()
+		gh.add_theme_constant_override("separation", 10)
+		for k in Settings.GFX.size():
+			var gc := _card(Settings.GFX[k], 96.0, func():
+				Settings.gfx = k
+				Settings.apply_gfx()
+				Settings.save_all()
+				_paint_cards(_gfx_cards, Settings.gfx))
+			gh.add_child(gc)
+			_gfx_cards.append(gc)
+		v.add_child(gh)
 		# difficoltà
 		v.add_child(_section("DIFFICOLTÀ"))
 		var dh := HBoxContainer.new()
 		dh.add_theme_constant_override("separation", 10)
 		for k in Settings.DIFFS.size():
-			var c := _diff_card(k)
+			var c := _card(Settings.DIFFS[k], 142.0, func():
+				Settings.difficulty = k
+				Settings.save_all()
+				_refresh_diff())
 			dh.add_child(c)
 			_diff_cards.append(c)
 		v.add_child(dh)
@@ -182,6 +244,7 @@ class SettingsPanel:
 		foot.add_child(done)
 		v.add_child(foot)
 		_refresh_diff()
+		_paint_cards(_gfx_cards, Settings.gfx)
 		# entra con una piccola dissolvenza
 		modulate.a = 0.0
 		create_tween().tween_property(self, "modulate:a", 1.0, 0.15)
@@ -286,13 +349,13 @@ class SettingsPanel:
 		return row
 
 	## Tre schede affiancate: nome e due righe di spiegazione; quella scelta è dorata.
-	func _diff_card(k: int) -> Button:
-		var d: Dictionary = Settings.DIFFS[k]
+	## Scheda di una scelta (difficoltà, grafica): nome e descrizione, si accende quella scelta.
+	func _card(d: Dictionary, h: float, on_pick: Callable) -> Button:
 		var b := Button.new()
 		b.toggle_mode = true
 		b.focus_mode = Control.FOCUS_NONE
 		b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		b.custom_minimum_size = Vector2(0, 142)
+		b.custom_minimum_size = Vector2(0, h)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var inner := VBoxContainer.new()
 		inner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -309,16 +372,16 @@ class SettingsPanel:
 		inner.add_child(ds)
 		b.add_child(inner)
 		b.set_meta("name_lbl", n)
-		b.pressed.connect(func():
-			Settings.difficulty = k
-			Settings.save_all()
-			_refresh_diff())
+		b.pressed.connect(on_pick)
 		return b
 
 	func _refresh_diff() -> void:
-		for k in _diff_cards.size():
-			var b := _diff_cards[k]
-			var sel := k == Settings.difficulty
+		_paint_cards(_diff_cards, Settings.difficulty)
+
+	func _paint_cards(cards: Array[Button], selected: int) -> void:
+		for k in cards.size():
+			var b := cards[k]
+			var sel := k == selected
 			b.set_pressed_no_signal(sel)
 			var bg := Color(0.52, 0.31, 0.11) if sel else Color(0.17, 0.095, 0.045)
 			var bd := UiStyle.GOLD if sel else UiStyle.OUTLINE

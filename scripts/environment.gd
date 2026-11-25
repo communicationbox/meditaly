@@ -30,8 +30,13 @@ void fragment() {
 """
 
 
+var sun: DirectionalLight3D
+var env: Environment
+
+
 func _ready() -> void:
-	var sun := DirectionalLight3D.new()
+	add_to_group("gfx")
+	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-52, -35, 0)
 	sun.light_color = Color(1.0, 0.95, 0.84)
 	sun.light_energy = 1.25
@@ -42,6 +47,7 @@ func _ready() -> void:
 	add_child(sun)
 	var we := WorldEnvironment.new()
 	var e := Environment.new()
+	env = e
 	e.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	var sm := ProceduralSkyMaterial.new()
@@ -78,3 +84,12 @@ func _ready() -> void:
 	sea.material_override = mat
 	sea.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(sea)
+	apply_gfx()
+
+
+## Qualità grafica (vedi Settings.apply_gfx): in Leggera niente bagliore e ombre a una fascia, più corte.
+func apply_gfx() -> void:
+	var light := Settings.gfx == Settings.GFX_LIGHT
+	env.glow_enabled = not light
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL if light else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	sun.directional_shadow_max_distance = 300.0 if light else 420.0

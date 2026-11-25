@@ -39,9 +39,17 @@ if [ $FULL = 1 ]; then
 	lipo "$EXE" -thin arm64 -output "$EXE.arm64" && mv "$EXE.arm64" "$EXE" && chmod +x "$EXE"
 	codesign --force --deep -s - "$APP"
 	ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT/Signori_d_Italia_Mac.zip"
+	# Mac Intel: renderer Mobile (tag intel_mac nel preset) e grafica Leggera di partenza
+	IAPP="$OUT/intel/Signori d'Italia.app"
+	mkdir -p "$OUT/intel"
+	"$GODOT" --headless --path . --export-release "macOS Intel" "$IAPP" > "$OUT/export-intel.log" 2>&1
+	IEXE=$(ls "$IAPP/Contents/MacOS/"* | head -1)
+	lipo "$IEXE" -thin x86_64 -output "$IEXE.x86" && mv "$IEXE.x86" "$IEXE" && chmod +x "$IEXE"
+	codesign --force --deep -s - "$IAPP"
+	ditto -c -k --sequesterRsrc --keepParent "$IAPP" "$OUT/Signori_d_Italia_Mac_Intel.zip"
 	"$GODOT" --headless --path . --export-release "Windows" "$OUT/windows/Signori d'Italia.exe" > "$OUT/export-win.log" 2>&1
 	(cd "$OUT/windows" && zip -qr ../Signori_d_Italia_Windows.zip .)
-	ASSETS+=("$OUT/Signori_d_Italia_Mac.zip" "$OUT/Signori_d_Italia_Windows.zip")
+	ASSETS+=("$OUT/Signori_d_Italia_Mac.zip" "$OUT/Signori_d_Italia_Mac_Intel.zip" "$OUT/Signori_d_Italia_Windows.zip")
 fi
 
 python3 - "$OUT" "$TAG" "$NEW" "$ENGINE" "$REPO" "$NOTE" <<'PY'
